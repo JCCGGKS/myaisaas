@@ -85,14 +85,6 @@ function submit() {
         </button>
       </form>
 
-      <a class="auth__alt" href="#" @click.prevent>
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6">
-          <path d="M21 11.5a8.5 8.5 0 11-3.6-6.9" />
-          <path d="M21 4v4h-4" />
-        </svg>
-        Continue with Telegram
-      </a>
-
       <p class="auth__switch">
         Already have an account? <router-link to="/signin">Sign in</router-link>
       </p>
@@ -223,24 +215,6 @@ function submit() {
 .form__submit:disabled {
   opacity: 0.7;
   cursor: progress;
-}
-.auth__alt {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 9px;
-  margin-top: 16px;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  font-family: var(--font-mono);
-  font-size: 13px;
-  color: var(--text);
-  transition: border-color 0.2s, color 0.2s;
-}
-.auth__alt:hover {
-  border-color: var(--cyan);
-  color: var(--cyan);
 }
 .auth__switch {
   text-align: center;
