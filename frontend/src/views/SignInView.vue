@@ -32,7 +32,7 @@ function submit() {
       </router-link>
 
       <h1 class="auth__title">Sign in</h1>
-      <p class="auth__sub">Welcome back. Your radars are still watching.</p>
+      <p class="auth__sub">以游客身份已可创建 1 个雷达并绑定 1 个渠道。登录后解锁：更多雷达 + 同时绑定多个推送渠道。</p>
 
       <form class="form" @submit.prevent="submit">
         <label class="field">

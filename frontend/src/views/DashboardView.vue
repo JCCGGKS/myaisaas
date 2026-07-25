@@ -1,22 +1,34 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { listRadars, listEvents, createRadar } from '../services/api.js'
+import { listRadars, listEvents, createRadar, listChannels, bindChannel } from '../services/api.js'
 
 const radars = ref([])
 const eventsByRadar = ref({})
 const loading = ref(true)
 const error = ref('')
+const showLimit = ref(false)
 
 const newQuery = ref('')
 const creating = ref(false)
+
+const channels = ref([])
+const bindingType = ref('')
+
+const EXAMPLES = [
+  'LISA 演唱会与新歌动态',
+  'OpenAI 与 AI Agent 行业动态',
+  '竞品融资与产品发布新闻',
+]
 
 async function load() {
   loading.value = true
   error.value = ''
   try {
-    radars.value = await listRadars()
+    const [rs, chs] = await Promise.all([listRadars(), listChannels()])
+    radars.value = rs
+    channels.value = chs
     await Promise.all(
-      radars.value.map(async (r) => {
+      rs.map(async (r) => {
         eventsByRadar.value[r.id] = await listEvents(r.id)
       })
     )
@@ -30,18 +42,46 @@ async function load() {
 async function addRadar() {
   if (!newQuery.value.trim() || creating.value) return
   creating.value = true
+  showLimit.value = false
   try {
     const radar = await createRadar(newQuery.value)
     newQuery.value = ''
     await load()
-    // 滚动到新雷达
     requestAnimationFrame(() => {
       document.getElementById(`radar-${radar.id}`)?.scrollIntoView({ behavior: 'smooth' })
     })
   } catch (e) {
-    error.value = e.message || '创建失败'
+    if (e.code === 'limit_exceeded') {
+      showLimit.value = true
+      error.value = e.message
+    } else {
+      error.value = e.message || '创建失败'
+    }
   } finally {
     creating.value = false
+  }
+}
+
+function fillExample(ex) {
+  newQuery.value = ex
+}
+
+async function bind(c) {
+  if (c.bound || bindingType.value) return
+  bindingType.value = c.type
+  try {
+    const res = await bindChannel(c.type)
+    const idx = channels.value.findIndex((x) => x.type === c.type)
+    if (idx >= 0) channels.value[idx] = res
+  } catch (e) {
+    if (e.code === 'limit_exceeded') {
+      showLimit.value = true
+      error.value = e.message
+    } else {
+      error.value = e.message || '绑定失败'
+    }
+  } finally {
+    bindingType.value = ''
   }
 }
 
@@ -65,34 +105,65 @@ onMounted(load)
         <router-link to="/" class="btn btn-ghost dash__back">← 返回首页</router-link>
       </header>
 
-      <form class="newradar" @submit.prevent="addRadar">
-        <span class="newradar__icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="18" height="18">
-            <circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2" />
-            <line x1="16.5" y1="16.5" x2="21" y2="21" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-          </svg>
-        </span>
-        <input
-          v-model="newQuery"
-          class="newradar__input"
-          type="text"
-          placeholder="新建雷达：想盯住什么？"
-          aria-label="新建雷达"
-        />
-        <button class="newradar__send btn btn-primary" type="submit" :disabled="creating">
-          {{ creating ? '创建中…' : '创建' }}
-        </button>
-      </form>
-
       <p v-if="error" class="dash__error mono">{{ error }}</p>
+
+      <p v-if="showLimit" class="dash__limit mono">
+        已达游客上限。<router-link to="/signin">登录 / 注册</router-link> 解锁更多雷达与多渠道绑定。
+      </p>
+
+      <!-- 创建框（常驻顶部，方便连续创建） -->
+      <section class="onboard">
+        <p class="eyebrow">// GET STARTED</p>
+        <h2 class="onboard__title">创建你的<span class="hl">专属雷达</span></h2>
+        <p class="onboard__sub">用一句话告诉系统你想盯住什么，它替你持续监测、命中即推送。</p>
+
+        <form class="onboard__form" @submit.prevent="addRadar">
+          <input
+            v-model="newQuery"
+            class="onboard__input"
+            type="text"
+            placeholder="例如：LISA 演唱会与新歌动态"
+            aria-label="新建雷达"
+          />
+          <button class="btn btn-primary onboard__send" type="submit" :disabled="creating">
+            {{ creating ? '创建中…' : '创建雷达' }}
+          </button>
+        </form>
+
+        <div class="onboard__chips">
+          <button v-for="ex in EXAMPLES" :key="ex" class="chip" type="button" @click="fillExample(ex)">
+            {{ ex }}
+          </button>
+        </div>
+
+        <div class="onboard__channels">
+          <p class="onboard__channels-title">
+            接收推送（可选）· <span class="mono">游客限绑 1 个渠道</span>
+          </p>
+          <div class="chans">
+            <div v-for="c in channels" :key="c.type" class="chan" :class="{ 'is-bound': c.bound }">
+              <span class="chan__type mono">{{ c.type }}</span>
+              <button
+                v-if="!c.bound"
+                class="chan__btn"
+                type="button"
+                :disabled="!!bindingType"
+                @click="bind(c)"
+              >
+                {{ bindingType === c.type ? '绑定中…' : '绑定' }}
+              </button>
+              <span v-else class="chan__ok mono">✓ 已绑定</span>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <div v-if="loading" class="dash__loading mono">加载雷达中…</div>
 
-      <div v-else-if="radars.length === 0" class="dash__empty">
-        <p>还没有雷达。在上方创建一个，开始监测你关心的一切。</p>
-      </div>
-
       <section v-else class="radars">
+        <p v-if="radars.length === 0" class="radars__empty mono">
+          雷达创建后会出现在这里，命中事件实时流入。
+        </p>
         <article
           v-for="r in radars"
           :key="r.id"
@@ -160,50 +231,121 @@ onMounted(load)
 .dash__sub { color: var(--muted); margin-top: 12px; max-width: 460px; }
 .dash__back { font-size: 13px; }
 
-.newradar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: var(--panel);
+.dash__error { color: var(--amber); margin: 14px 0; }
+.dash__limit {
+  margin: 14px 0;
+  padding: 14px 16px;
+  color: var(--text);
+  background: rgba(184, 255, 60, 0.07);
   border: 1px solid var(--line-strong);
-  border-radius: 999px;
-  padding: 8px 8px 8px 18px;
-  transition: border-color 0.25s, box-shadow 0.25s;
+  border-radius: 14px;
 }
-.newradar:focus-within {
-  border-color: var(--lime);
-  box-shadow: 0 0 0 4px rgba(184, 255, 60, 0.12);
+.dash__limit a { color: var(--lime); font-weight: 500; }
+.dash__loading { color: var(--muted); margin-top: 24px; }
+
+/* ---------- onboarding（常驻创建框） ---------- */
+.onboard {
+  margin-top: 8px;
+  padding: 44px 40px 48px;
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
 }
-.newradar__icon { color: var(--muted); display: grid; place-items: center; }
-.newradar__input {
+.onboard__title {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: clamp(30px, 4.5vw, 46px);
+  letter-spacing: -0.02em;
+  margin-top: 12px;
+}
+.onboard__title .hl { color: var(--lime); }
+.onboard__sub { color: var(--muted); margin-top: 12px; max-width: 480px; }
+.onboard__form {
+  display: flex;
+  gap: 10px;
+  margin-top: 28px;
+}
+.onboard__input {
   flex: 1;
-  background: none;
-  border: none;
-  outline: none;
+  background: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 16px;
   color: var(--text);
   font-family: var(--font-body);
   font-size: 15px;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
-.newradar__input::placeholder { color: var(--muted-2); }
-.newradar__send { font-size: 13px; padding: 11px 20px; }
-.newradar__send:disabled { opacity: 0.6; cursor: default; }
+.onboard__input::placeholder { color: var(--muted-2); }
+.onboard__input:focus {
+  outline: none;
+  border-color: var(--lime);
+  box-shadow: 0 0 0 3px rgba(184, 255, 60, 0.12);
+}
+.onboard__send { font-size: 14px; padding: 14px 24px; white-space: nowrap; }
+.onboard__send:disabled { opacity: 0.6; cursor: default; }
 
-.dash__error { color: var(--amber); margin: 14px 0; }
-.dash__loading { color: var(--muted); }
-.dash__empty {
-  margin-top: 40px;
-  padding: 40px;
-  text-align: center;
+.onboard__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+.chip {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
   color: var(--muted);
-  border: 1px dashed var(--line-strong);
-  border-radius: var(--radius-lg);
+  background: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 14px;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
 }
+.chip:hover { color: var(--text); border-color: var(--lime); }
 
+.onboard__channels { margin-top: 38px; }
+.onboard__channels-title { color: var(--muted); font-size: 14px; margin-bottom: 14px; }
+.onboard__channels-title .mono { color: var(--muted-2); font-size: 12px; }
+.chans { display: flex; flex-wrap: wrap; gap: 12px; }
+.chan {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  background: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  transition: border-color 0.2s;
+}
+.chan.is-bound { border-color: var(--line-strong); }
+.chan__type { font-size: 12px; color: var(--text); text-transform: uppercase; letter-spacing: 0.08em; }
+.chan__btn {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--lime);
+  background: none;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+.chan__btn:hover:not(:disabled) { background: rgba(184, 255, 60, 0.1); }
+.chan__btn:disabled { opacity: 0.5; cursor: default; }
+.chan__ok { font-size: 12px; color: var(--cyan); }
+
+/* ---------- 雷达列表 ---------- */
 .radars {
   display: flex;
   flex-direction: column;
   gap: 22px;
   margin-top: 40px;
+}
+.radars__empty {
+  color: var(--muted-2);
+  font-size: 13px;
+  padding: 20px 0;
 }
 .radar {
   padding: 24px;
@@ -218,6 +360,15 @@ onMounted(load)
   gap: 14px;
   margin-bottom: 18px;
 }
+.radar__live {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  color: var(--lime);
+  border: 1px solid var(--line-strong);
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+.radar__live.is-off { color: var(--muted-2); }
 .radar__live {
   font-size: 10px;
   letter-spacing: 0.16em;
@@ -274,5 +425,8 @@ onMounted(load)
 
 @media (max-width: 620px) {
   .dash__head { flex-direction: column; align-items: flex-start; }
+  .onboard { padding: 32px 22px 36px; }
+  .onboard__form { flex-direction: column; }
+  .onboard__send { width: 100%; }
 }
 </style>
