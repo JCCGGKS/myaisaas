@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted, nextTick, computed } from 'vue'
-import { listRadars, listEvents, createRadar, listChannels, bindChannel, seedDemoEvents } from '../services/api.js'
+import { listRadars, listEvents, createRadar, listChannels, bindChannel, seedDemoEvents, getMe, logout } from '../services/api.js'
 
 const radars = ref([])
 const eventsByRadar = ref({})
@@ -8,6 +8,10 @@ const loading = ref(true)
 const error = ref('')
 const showLimitModal = ref(false)
 const limitMsg = ref('')
+
+// 当前登录态：游客（is_guest=true）或已登录账号
+const me = ref(null)
+const loggingOut = ref(false)
 
 const newQuery = ref('')
 const creating = ref(false)
@@ -33,9 +37,10 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const [rs, chs] = await Promise.all([listRadars(), listChannels()])
+    const [rs, chs, meRes] = await Promise.all([listRadars(), listChannels(), getMe()])
     radars.value = rs
     channels.value = chs
+    me.value = meRes
     await Promise.all(
       rs.map(async (r) => {
         eventsByRadar.value[r.id] = await listEvents(r.id)
@@ -45,6 +50,20 @@ async function load() {
     error.value = e.message || '加载失败'
   } finally {
     loading.value = false
+  }
+}
+
+async function doLogout() {
+  if (loggingOut.value) return
+  loggingOut.value = true
+  try {
+    await logout()
+  } catch {
+    /* 即便后端失败也按已登出处理，刷新即可 */
+  } finally {
+    me.value = { is_guest: true, email: null }
+    loggingOut.value = false
+    await load()
   }
 }
 
@@ -153,7 +172,22 @@ onMounted(load)
           <h1 class="dash__title">Your <span class="hl">Radars</span></h1>
           <p class="dash__sub">持续监测中 — 命中即推送，这里是你所有雷达的事件流。</p>
         </div>
-        <router-link to="/" class="btn btn-ghost dash__back">← 返回首页</router-link>
+        <div class="dash__head-right">
+          <!-- 登录态：游客提示 / 已登录账号 -->
+          <div v-if="me" class="who" :class="{ 'who--guest': me.is_guest }">
+            <template v-if="me.is_guest">
+              <span class="who__badge mono">游客模式</span>
+              <router-link to="/signin" class="who__link">登录 / 注册解锁更多 →</router-link>
+            </template>
+            <template v-else>
+              <span class="who__email mono">{{ me.email }}</span>
+              <button class="who__logout mono" type="button" :disabled="loggingOut" @click="doLogout">
+                {{ loggingOut ? '退出中…' : '退出' }}
+              </button>
+            </template>
+          </div>
+          <router-link to="/" class="btn btn-ghost dash__back">← 返回首页</router-link>
+        </div>
       </header>
 
       <p v-if="error" class="dash__error mono">{{ error }}</p>
@@ -348,6 +382,47 @@ onMounted(load)
 .dash__title .hl { color: var(--lime); }
 .dash__sub { color: var(--muted); margin-top: 12px; max-width: 460px; }
 .dash__back { font-size: 13px; }
+.dash__head-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+}
+.who {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.who__badge {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--amber);
+  border: 1px solid var(--amber);
+  border-radius: 6px;
+  padding: 4px 9px;
+}
+.who__link {
+  font-size: 13px;
+  color: var(--lime);
+}
+.who__link:hover { text-decoration: underline; }
+.who__email {
+  font-size: 13px;
+  color: var(--text);
+}
+.who__logout {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  background: none;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  padding: 5px 10px;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
+}
+.who__logout:hover:not(:disabled) { color: var(--text); border-color: var(--lime); }
+.who__logout:disabled { opacity: 0.6; cursor: default; }
 
 .dash__error { color: var(--amber); margin: 14px 0; }
 .dash__loading { color: var(--muted); margin-top: 24px; }

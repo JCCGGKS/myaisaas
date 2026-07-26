@@ -1,18 +1,34 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { login } from '../services/api.js'
 
 const router = useRouter()
 const email = ref('')
 const password = ref('')
 const show = ref(false)
 const submitting = ref(false)
+const errMsg = ref('')
 
-function submit() {
+async function submit() {
   if (submitting.value) return
+  errMsg.value = ''
   submitting.value = true
-  // demo: no real backend — jump into the app
-  setTimeout(() => router.push('/dashboard'), 350)
+  try {
+    await login(email.value, password.value)
+    // 后端已把当前游客合并进账号并写入 JWT cookie，直接进 dashboard
+    router.push('/dashboard')
+  } catch (e) {
+    if (e.status === 404) {
+      errMsg.value = '账号不存在，请先注册'
+    } else if (e.status === 401) {
+      errMsg.value = '密码错误，请重试'
+    } else {
+      errMsg.value = e.message || '登录失败'
+    }
+  } finally {
+    submitting.value = false
+  }
 }
 </script>
 
@@ -59,6 +75,8 @@ function submit() {
         <button class="btn btn-primary form__submit" type="submit" :disabled="submitting">
           {{ submitting ? 'Signing in…' : 'Sign in' }}
         </button>
+
+        <p v-if="errMsg" class="auth__err">{{ errMsg }}</p>
       </form>
 
       <p class="auth__switch">
@@ -204,5 +222,15 @@ function submit() {
 }
 .auth__switch a:hover {
   text-decoration: underline;
+}
+.auth__err {
+  margin-top: 14px;
+  font-size: 13.5px;
+  color: var(--amber);
+  text-align: center;
+  background: rgba(255, 176, 32, 0.08);
+  border: 1px solid rgba(255, 176, 32, 0.3);
+  border-radius: 10px;
+  padding: 10px 12px;
 }
 </style>

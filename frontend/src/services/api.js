@@ -54,6 +54,16 @@ function limitError(msg) {
   return err
 }
 
+// 结构化错误：携带后端返回的状态码与业务 code（如 limit_exceeded / 409 等）
+class ApiError extends Error {
+  constructor(message, { status, code } = {}) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.code = code
+  }
+}
+
 // ---------- 真实请求封装 ----------
 async function request(path, options = {}) {
   const res = await fetch(`${API_BASE}${path}`, {
@@ -61,9 +71,12 @@ async function request(path, options = {}) {
     ...options,
   })
   if (!res.ok) {
+    let body = null
+    let msg = `API ${res.status} ${res.statusText}`
     let code = null
     try {
-      const body = await res.json()
+      body = await res.json()
+      msg = body?.detail || body?.message || msg
       code = body?.code || null
     } catch {
       /* ignore non-json error body */
@@ -71,7 +84,7 @@ async function request(path, options = {}) {
     if (res.status === 402 || code === 'limit_exceeded') {
       throw limitError('已达游客上限，请登录解锁更多')
     }
-    throw new Error(`API ${res.status} ${res.statusText}`)
+    throw new ApiError(msg, { status: res.status, code })
   }
   return res.json()
 }
@@ -192,4 +205,42 @@ export async function seedDemoEvents(radarId, keywords = []) {
     method: 'POST',
     body: JSON.stringify({ radar_id: radarId, items }),
   })
+}
+
+// ---------- 鉴权（JWT，cookie 自动携带/写入） ----------
+// 说明：注册/登录本质是把「当前游客」升级为账号，后端会把游客的雷达与渠道
+// 合并进账号并写入 wa_uid（JWT）cookie。前端无需手动管理 token，依赖 cookie 即可。
+export async function register(email, password) {
+  if (USE_MOCK) {
+    return { user_id: 'mock', is_guest: false }
+  }
+  return request('/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  })
+}
+
+export async function login(email, password) {
+  if (USE_MOCK) {
+    return { user_id: 'mock', is_guest: false }
+  }
+  return request('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  })
+}
+
+// 当前用户状态：游客（is_guest=true，无 email）或已登录账号（is_guest=false）
+export async function getMe() {
+  if (USE_MOCK) {
+    return { user_id: 'mock', email: null, is_guest: true, channel_bindings: [] }
+  }
+  return request('/auth/me')
+}
+
+export async function logout() {
+  if (USE_MOCK) {
+    return { ok: true }
+  }
+  return request('/auth/logout', { method: 'POST' })
 }

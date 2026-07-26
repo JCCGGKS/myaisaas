@@ -1,6 +1,7 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { register } from '../services/api.js'
 
 const router = useRouter()
 const name = ref('')
@@ -9,16 +10,29 @@ const password = ref('')
 const confirm = ref('')
 const show = ref(false)
 const submitting = ref(false)
+const errMsg = ref('')
 
-function submit() {
+async function submit() {
   if (submitting.value) return
+  errMsg.value = ''
   if (password.value !== confirm.value) {
-    alert('Passwords do not match')
+    errMsg.value = '两次输入的密码不一致'
     return
   }
   submitting.value = true
-  // demo: no real backend — jump into the app
-  setTimeout(() => router.push('/dashboard'), 350)
+  try {
+    await register(email.value, password.value)
+    // 后端已把当前游客合并进账号并写入 JWT cookie，直接进 dashboard
+    router.push('/dashboard')
+  } catch (e) {
+    if (e.status === 409) {
+      errMsg.value = '该邮箱已注册，请直接登录'
+    } else {
+      errMsg.value = e.message || '注册失败'
+    }
+  } finally {
+    submitting.value = false
+  }
 }
 </script>
 
@@ -83,6 +97,8 @@ function submit() {
         <button class="btn btn-primary form__submit" type="submit" :disabled="submitting">
           {{ submitting ? 'Creating…' : 'Sign up' }}
         </button>
+
+        <p v-if="errMsg" class="auth__err">{{ errMsg }}</p>
       </form>
 
       <p class="auth__switch">
@@ -228,5 +244,15 @@ function submit() {
 }
 .auth__switch a:hover {
   text-decoration: underline;
+}
+.auth__err {
+  margin-top: 14px;
+  font-size: 13.5px;
+  color: var(--amber);
+  text-align: center;
+  background: rgba(255, 176, 32, 0.08);
+  border: 1px solid rgba(255, 176, 32, 0.3);
+  border-radius: 10px;
+  padding: 10px 12px;
 }
 </style>
