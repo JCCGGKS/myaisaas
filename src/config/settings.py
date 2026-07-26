@@ -56,6 +56,17 @@ class Settings(BaseSettings):
     # 应用
     app_name: str = "Watch Anything"
     cors_origins: list[str] = ["*"]
+    # 对外链接基址（验证邮件/回调等拼接绝对 URL 用）
+    backend_base_url: str = "http://127.0.0.1:8000"
+
+    # CSRF 防护（Origin 校验，呼应 01_guest.md §8 第 1 步）
+    # 对写请求（POST/PUT/PATCH/DELETE）校验 Origin 与「本站 Host 源」或下列受信前端源一致，
+    # 不一致返回 403。测试用 WA_CSRF_ENABLED=false 关闭。生产务必把受信源改为真实前端源。
+    csrf_enabled: bool = True
+    csrf_trusted_origins: list[str] = [
+        "http://localhost:5173", "http://127.0.0.1:5173",
+        "http://localhost:5174", "http://127.0.0.1:5174",
+    ]
 
     # 鉴权（轻量 MVP：token 即 user_id 的签名，仅用于打通流程）
     secret_key: str = "dev-insecure-secret-change-me-please-override"
@@ -67,7 +78,15 @@ class Settings(BaseSettings):
 
     # 外部依赖（通知渠道用，未配置时渠道可绑定但发送走 Fake）
     telegram_bot_token: str = ""
-    smtp_host: str = ""
+
+    # 邮件发送（EmailChannel）：现阶段用本地 SMTP（MailHog/Mailpit，localhost:1025）。
+    # 后续可切「个人 SMTP → 云厂 SMTP 中继 → 云厂 HTTP API」，仅改此处与 EmailBackend 实现。
+    smtp_host: str = "localhost"   # 留空则 EmailChannel 退回 mock（不真发）
+    smtp_port: int = 1025
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_use_tls: bool = False     # STARTTLS
+    smtp_use_ssl: bool = False     # SMTP over SSL（与 use_tls 互斥）
     from_email: str = "noreply@watch-anything.local"
 
     # ---------- 监控 / LLM ----------

@@ -7,6 +7,7 @@
 from data.engine import Session
 from business.notifier.channels import PushMessage
 from business.notifier.dispatch import dispatch
+from dao.notification_dao import exists as notification_exists
 from dao.notification_dao import record
 from model.event import Event
 from model.radar import Radar
@@ -24,13 +25,20 @@ def _resolve_recipient(user: User, channel_type: str) -> str | None:
 
 
 async def notify_radar(event: Event, radar: Radar, user: User, db: Session | None = None) -> list[str]:
-    """向 radar.notify_channels 逐个推送 event；返回成功推送的渠道列表。"""
+    """向 radar.notify_channels 逐个推送 event；返回成功推送的渠道列表。
+
+    去重：已存在 Notification(event_id, channel) 则跳过（权威持久去重），
+    避免监控循环重跑导致同一事件重复推送。
+    """
     pushed: list[str] = []
     msg = PushMessage(title=event.title, body=event.summary or event.title, url=event.source_url)
     for channel in radar.notify_channels or []:
         recipient = _resolve_recipient(user, channel)
         if not recipient:
             logger.warning("跳过推送 channel=%s：未找到已验证接收人", channel)
+            continue
+        if db is not None and notification_exists(db, event.id, channel):
+            logger.info("去重跳过 event_id=%s channel=%s（已推送过）", event.id, channel)
             continue
         ok = await dispatch(channel, recipient, msg)
         if ok:

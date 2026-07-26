@@ -9,6 +9,7 @@ from api.routes import auth, channels, ingest, radars, webhooks
 from business.monitor.scheduler import scheduler
 from config.settings import settings
 from data.engine import init_db
+from middleware.csrf import CSRFOriginMiddleware
 from utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -28,6 +29,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
+# 中间件顺序（最后注册 = 最外层）：CORS 最外层（保证 403 也带 CORS 头），
+# 其内为 CSRF Origin 校验，最内为请求日志。
+app.middleware("http")(log_requests)
+app.add_middleware(CSRFOriginMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -35,7 +40,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.middleware("http")(log_requests)
 register_exception_handlers(app)
 
 app.include_router(radars.router)

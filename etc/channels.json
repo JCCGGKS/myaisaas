@@ -1,0 +1,8 @@
+{
+  "comment": "可选推送渠道清单（不含 recipient）。新增渠道只需在此登记 type，并到 notifier/factory 注册对应策略即可。实装状态由 bind_channel 控制（当前仅 email 实装，其余返回未实现）。",
+  "channels": [
+    { "type": "email", "label": "邮箱", "desc": "命中事件主动发到邮箱（已实装）" },
+    { "type": "webpush", "label": "Web 推送", "desc": "浏览器推送（规划中）" },
+    { "type": "feishu", "label": "飞书", "desc": "飞书机器人推送（规划中）" }
+  ]
+}

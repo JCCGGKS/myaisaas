@@ -19,6 +19,7 @@ guest_channel_limit: 1
 app_name: "Watch Anything"
 cors_origins:
   - "*"
+backend_base_url: "http://127.0.0.1:8000"
 
 # ---------------- 鉴权（轻量 MVP：token 即 user_id 的签名） ----------------
 # 生产务必用环境变量 WA_SECRET_KEY 覆盖为随机长串
@@ -29,9 +30,16 @@ token_expire_hours: 720   # 30 天
 # 生产环境用 WA_COOKIE_SECURE=true 覆盖。
 cookie_secure: false
 
-# ---------------- 外部依赖（通知渠道用，未配置时渠道可绑定但发送走 Fake） ----------------
+# ---------------- 外部依赖（通知渠道用） ----------------
+# 现阶段 email 走本地 SMTP（MailHog/Mailpit）：docker run -p 1025:1025 -p 8025:8025 mailhog/mailhog
+# 浏览器打开 http://localhost:8025 查看捕获的邮件。生产可改 WA_SMTP_HOST 等切云厂。
 telegram_bot_token: ""
-smtp_host: ""
+smtp_host: "localhost"
+smtp_port: 1025
+smtp_user: ""
+smtp_password: ""
+smtp_use_tls: false
+smtp_use_ssl: false
 from_email: "noreply@watch-anything.local"
 
 # ---------------- 监控 / LLM ----------------

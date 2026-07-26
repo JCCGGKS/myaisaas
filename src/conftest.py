@@ -17,3 +17,5 @@ os.environ["WA_TELEGRAM_BOT_TOKEN"] = ""
 os.environ["WA_SMTP_HOST"] = ""
 # TestClient 走 http，关闭 cookie 的 Secure 属性以便 cookie 能回传
 os.environ["WA_COOKIE_SECURE"] = "false"
+# 测试环境关闭 CSRF Origin 校验（TestClient 不发 Origin 头）；CSRF 本身由 test_csrf.py 单独覆盖
+os.environ["WA_CSRF_ENABLED"] = "false"

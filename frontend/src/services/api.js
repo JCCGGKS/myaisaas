@@ -18,9 +18,9 @@ const MOCK_RADARS = []
 const MOCK_EVENTS = {}
 
 const MOCK_CHANNELS = [
-  { type: 'telegram', bound: false },
   { type: 'email', bound: false },
-  { type: 'webhook', bound: false },
+  { type: 'webpush', bound: false },
+  { type: 'feishu', bound: false },
 ]
 
 // 为雷达生成示例事件：即便未绑定渠道，事件流也能直接渲染到页面（用于演示/测试）

@@ -204,10 +204,10 @@ wa_guest : 不透明随机串（游客标识，如 secrets.token_urlsafe()）
 - CSRF 防护与 `wa_auth` 的 `SameSite` 是**互补**关系，不互斥。
 
 ### 自检清单（后续）
-- [ ] 新增中间件/依赖校验写请求的 `Origin` 一致性（不匹配 403）。
+- [x] 新增中间件/依赖校验写请求的 `Origin` 一致性（不匹配 403）—— 已实现 `middleware/csrf.py`，覆盖所有写请求。
 - [ ] 评估是否将 `wa_auth` 从 `Strict` 调整（若需跨站，配合 CSRF token 再降 `Lax`）。
-- [ ] 高价值写接口（密码/删除/解绑）纳入 CSRF 强制校验范围。
-- [ ] 补 CSRF 校验的测试用例（含伪造 Origin 被拒、合法 Origin 放行）。
+- [x] 高价值写接口（密码/删除/解绑/绑定/验证）纳入 CSRF 强制校验范围（全局写请求均校验）。
+- [x] 补 CSRF 校验的测试用例（含伪造 Origin 被拒、合法 Origin 放行、缺 Origin 被拒）—— 见 `tests/test_csrf.py`。
 
 ---
 

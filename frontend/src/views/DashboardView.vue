@@ -218,34 +218,13 @@ onUnmounted(() => {
       <section class="onboard">
         <p class="eyebrow">// GET STARTED</p>
         <h2 class="onboard__title">创建你的<span class="hl">专属雷达</span></h2>
-        <p class="onboard__sub">一句话告诉系统你想盯住什么，并先绑定一个推送渠道，命中即通知你。</p>
+        <p class="onboard__sub">一句话告诉系统你想盯住什么</p>
 
-        <!-- ① 渠道（同框） -->
+        <!-- 创建（可用渠道清单由后端 JSON 配置加载，绑定在雷达卡片内完成） -->
         <div class="onboard__step">
           <span class="onboard__stepnum mono">1</span>
           <div class="onboard__stepbody">
-            <p class="onboard__steptitle">推送渠道（可选）</p>
-            <div class="chans">
-              <div v-for="c in channels" :key="c.type" class="chan">
-                <span class="chan__type mono">{{ c.type }}</span>
-                <button
-                  class="chan__btn"
-                  type="button"
-                  :disabled="!!bindingType || c.bound"
-                  @click="bind(c)"
-                >
-                  {{ bindingType === c.type ? '绑定中…' : (c.bound ? '已绑定' : '绑定') }}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- ② 创建（同框，需先绑渠道） -->
-        <div class="onboard__step">
-          <span class="onboard__stepnum mono">2</span>
-          <div class="onboard__stepbody">
-            <p class="onboard__steptitle">创建雷达</p>
+            <p class="onboard__steptitle">创建雷达（创建后可在下方卡片点击「点击绑定」关联推送渠道，命中即通知你）</p>
             <form class="onboard__form" @submit.prevent="addRadar">
               <input
                 v-model="newQuery"

@@ -1,62 +1,75 @@
-"""多通道通知分发集成测试：注册用户绑两个渠道，扫描命中后两渠道均推送且防重发。"""
-import asyncio
+"""通知分发测试：多通道推送 + 去重（防重发）。
 
-from fastapi.testclient import TestClient
+email 在测试中因 WA_SMTP_HOST="" 走 mock（发送返回 True）；
+webpush 本期未实现，用 FakeChannel 模拟第二个渠道以验证多通道与去重逻辑。
+"""
+import asyncio
 from sqlalchemy import select
 
-from business.monitor.scanner import scan_radar
-from business.monitor.sources.base import RawItem, Source
-from dao.radar_dao import get as get_radar
-from dao.user_dao import get_by_email, get_by_id
+from business.notifier.channels import FakeChannel
+from business.notifier.factory import ChannelFactory
+from business.notifier.notify import notify_radar
 from data.engine import SessionLocal
 from model.event import Event
 from model.notification import Notification
+from model.radar import Radar
+from model.user import User
 
 
-class FakeSource(Source):
-    source_type = "fake"
-
-    def __init__(self, items):
-        self._items = items
-
-    def source_id(self):
-        return "fake:1"
-
-    async def fetch(self, state=None):
-        return self._items
-
-
-def test_notify_multi_channel(client: TestClient):
-    # 先占游客限额，再注册解锁
-    client.post("/api/radars", json={"raw_query": "LISA 演唱会"})
-    client.post("/api/auth/register", json={"email": "u@e.com", "password": "pw"})
-
-    db0 = SessionLocal()
-    user = get_by_email(db0, "u@e.com")
-    db0.close()
-
-    # 绑定 telegram（回填 chat_id）与 email
-    client.post("/api/channels/telegram/bind")
-    client.post("/webhooks/telegram", json={"user_id": user.id, "chat_id": "chat-1"})
-    client.post("/api/channels/email/bind", json={"recipient": "me@e.com"})
-
-    # 创建雷达并指定多通道
-    r = client.post(
-        "/api/radars",
-        json={"raw_query": "LISA 演唱会", "notify_channels": ["telegram", "email"]},
-    )
-    rid = r.json()["id"]
+def test_notify_multi_channel_and_dedup():
+    # webpush 本期未实现，用 FakeChannel 模拟第二个渠道以验证多通道 + 去重
+    original = ChannelFactory._registry.get("webpush")
+    ChannelFactory.register("webpush", FakeChannel)
 
     db = SessionLocal()
-    radar = get_radar(db, rid)
-    user = get_by_id(db, radar.owner_id)
-    items = [RawItem("LISA 演唱会官宣", "u1", "", "fake:1")]
-    asyncio.run(scan_radar(db, radar, user, llm=None, sources=[FakeSource(items)]))
+    try:
+        user = User(
+            email="notify_test@example.com",
+            password="x",
+            is_guest=False,
+            channel_bindings=[
+                {"channel_type": "email", "recipient": "me@example.com", "verified": True},
+                {"channel_type": "webpush", "recipient": "sub-x", "verified": True},
+            ],
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
 
-    evs = db.scalars(select(Event).where(Event.radar_id == rid)).all()
-    assert len(evs) == 1
-    assert set(evs[0].pushed_channels) == {"telegram", "email"}
+        radar = Radar(owner_id=user.id, raw_query="q", notify_channels=["email", "webpush"], active=True)
+        db.add(radar)
+        db.commit()
+        db.refresh(radar)
 
-    nots = db.scalars(select(Notification).where(Notification.event_id == evs[0].id)).all()
-    assert {n.channel for n in nots} == {"telegram", "email"}
-    db.close()
+        event = Event(radar_id=radar.id, dedup_key="k1", title="命中", summary="详情", source_url="http://x")
+        db.add(event)
+        db.commit()
+        db.refresh(event)
+
+        # 首次推送：两渠道都应成功并记录 Notification
+        pushed = asyncio.run(notify_radar(event, radar, user, db))
+        assert set(pushed) == {"email", "webpush"}
+
+        nots = db.scalars(select(Notification).where(Notification.event_id == event.id)).all()
+        assert {n.channel for n in nots} == {"email", "webpush"}
+
+        # 再次推送同一事件 → 去重，不应再新增 Notification，返回空
+        pushed2 = asyncio.run(notify_radar(event, radar, user, db))
+        assert pushed2 == []
+
+        nots2 = db.scalars(select(Notification).where(Notification.event_id == event.id)).all()
+        assert len(nots2) == 2
+
+        # 清理，避免污染共享测试库
+        for n in nots2:
+            db.delete(n)
+        db.delete(event)
+        db.delete(radar)
+        db.delete(user)
+        db.commit()
+    finally:
+        if original is None:
+            ChannelFactory._registry.pop("webpush", None)
+        else:
+            ChannelFactory._registry["webpush"] = original
+        db.close()
