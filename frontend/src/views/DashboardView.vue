@@ -1,18 +1,23 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, nextTick, computed } from 'vue'
 import { listRadars, listEvents, createRadar, listChannels, bindChannel } from '../services/api.js'
 
 const radars = ref([])
 const eventsByRadar = ref({})
 const loading = ref(true)
 const error = ref('')
-const showLimit = ref(false)
+const showLimitModal = ref(false)
+const limitMsg = ref('')
 
 const newQuery = ref('')
 const creating = ref(false)
 
 const channels = ref([])
 const bindingType = ref('')
+const showBindModal = ref(false)
+
+// 已绑定的渠道（同框内先绑后建）
+const boundChannel = computed(() => channels.value.find((c) => c.bound) || null)
 
 const EXAMPLES = [
   'LISA 演唱会与新歌动态',
@@ -42,18 +47,21 @@ async function load() {
 async function addRadar() {
   if (!newQuery.value.trim() || creating.value) return
   creating.value = true
-  showLimit.value = false
+  showLimitModal.value = false
   try {
-    const radar = await createRadar(newQuery.value)
+    // 渠道可选：未绑定时传空值占位（"未绑定"），不阻断创建
+    const channel = boundChannel.value?.type || ''
+    const radar = await createRadar(newQuery.value, channel)
     newQuery.value = ''
     await load()
-    requestAnimationFrame(() => {
-      document.getElementById(`radar-${radar.id}`)?.scrollIntoView({ behavior: 'smooth' })
+    nextTick(() => {
+      document.getElementById(`radar-${radar.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
   } catch (e) {
     if (e.code === 'limit_exceeded') {
-      showLimit.value = true
-      error.value = e.message
+      showLimitModal.value = true
+      limitMsg.value = e.message
+      error.value = ''
     } else {
       error.value = e.message || '创建失败'
     }
@@ -73,10 +81,14 @@ async function bind(c) {
     const res = await bindChannel(c.type)
     const idx = channels.value.findIndex((x) => x.type === c.type)
     if (idx >= 0) channels.value[idx] = res
+    // 绑定后关闭弹窗并刷新（后端会回填雷达的 notify_channel）
+    showBindModal.value = false
+    await load()
   } catch (e) {
     if (e.code === 'limit_exceeded') {
-      showLimit.value = true
-      error.value = e.message
+      showLimitModal.value = true
+      limitMsg.value = e.message
+      error.value = ''
     } else {
       error.value = e.message || '绑定失败'
     }
@@ -89,6 +101,10 @@ const fmtTime = (iso) => {
   const d = new Date(iso)
   return d.toLocaleString()
 }
+
+// 雷达绑定的渠道列表：优先取 channels 数组（多通道），兼容旧的单值 notify_channel
+const radarChannels = (r) =>
+  Array.isArray(r.channels) ? r.channels : r.notify_channel ? [r.notify_channel] : []
 
 onMounted(load)
 </script>
@@ -107,52 +123,57 @@ onMounted(load)
 
       <p v-if="error" class="dash__error mono">{{ error }}</p>
 
-      <p v-if="showLimit" class="dash__limit mono">
-        已达游客上限。<router-link to="/signin">登录 / 注册</router-link> 解锁更多雷达与多渠道绑定。
-      </p>
-
-      <!-- 创建框（常驻顶部，方便连续创建） -->
+      <!-- 同框：先绑推送渠道，再创建雷达 -->
       <section class="onboard">
         <p class="eyebrow">// GET STARTED</p>
         <h2 class="onboard__title">创建你的<span class="hl">专属雷达</span></h2>
-        <p class="onboard__sub">用一句话告诉系统你想盯住什么，它替你持续监测、命中即推送。</p>
+        <p class="onboard__sub">一句话告诉系统你想盯住什么，并先绑定一个推送渠道，命中即通知你。</p>
 
-        <form class="onboard__form" @submit.prevent="addRadar">
-          <input
-            v-model="newQuery"
-            class="onboard__input"
-            type="text"
-            placeholder="例如：LISA 演唱会与新歌动态"
-            aria-label="新建雷达"
-          />
-          <button class="btn btn-primary onboard__send" type="submit" :disabled="creating">
-            {{ creating ? '创建中…' : '创建雷达' }}
-          </button>
-        </form>
-
-        <div class="onboard__chips">
-          <button v-for="ex in EXAMPLES" :key="ex" class="chip" type="button" @click="fillExample(ex)">
-            {{ ex }}
-          </button>
+        <!-- ① 渠道（同框） -->
+        <div class="onboard__step">
+          <span class="onboard__stepnum mono">1</span>
+          <div class="onboard__stepbody">
+            <p class="onboard__steptitle">推送渠道（可选）</p>
+            <div class="chans">
+              <div v-for="c in channels" :key="c.type" class="chan">
+                <span class="chan__type mono">{{ c.type }}</span>
+                <button
+                  class="chan__btn"
+                  type="button"
+                  :disabled="!!bindingType || c.bound"
+                  @click="bind(c)"
+                >
+                  {{ bindingType === c.type ? '绑定中…' : '绑定' }}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div class="onboard__channels">
-          <p class="onboard__channels-title">
-            接收推送（可选）· <span class="mono">游客限绑 1 个渠道</span>
-          </p>
-          <div class="chans">
-            <div v-for="c in channels" :key="c.type" class="chan" :class="{ 'is-bound': c.bound }">
-              <span class="chan__type mono">{{ c.type }}</span>
-              <button
-                v-if="!c.bound"
-                class="chan__btn"
-                type="button"
-                :disabled="!!bindingType"
-                @click="bind(c)"
-              >
-                {{ bindingType === c.type ? '绑定中…' : '绑定' }}
+        <!-- ② 创建（同框，需先绑渠道） -->
+        <div class="onboard__step">
+          <span class="onboard__stepnum mono">2</span>
+          <div class="onboard__stepbody">
+            <p class="onboard__steptitle">创建雷达</p>
+            <form class="onboard__form" @submit.prevent="addRadar">
+              <input
+                v-model="newQuery"
+                class="onboard__input"
+                type="text"
+                placeholder="例如：LISA 演唱会与新歌动态"
+                aria-label="新建雷达"
+              />
+              <button class="btn btn-primary onboard__send" type="submit" :disabled="creating">
+                {{ creating ? '创建中…' : '创建雷达' }}
               </button>
-              <span v-else class="chan__ok mono">✓ 已绑定</span>
+            </form>
+            <p v-if="!boundChannel" class="onboard__hint mono">
+              💡 推送渠道可选：绑定后命中的事件会主动通知你；不绑定也能直接创建雷达。
+            </p>
+            <div class="onboard__chips">
+              <button v-for="ex in EXAMPLES" :key="ex" class="chip" type="button" @click="fillExample(ex)">
+                {{ ex }}
+              </button>
             </div>
           </div>
         </div>
@@ -160,10 +181,8 @@ onMounted(load)
 
       <div v-if="loading" class="dash__loading mono">加载雷达中…</div>
 
-      <section v-else class="radars">
-        <p v-if="radars.length === 0" class="radars__empty mono">
-          雷达创建后会出现在这里，命中事件实时流入。
-        </p>
+      <!-- 雷达列表：创建后才出现，并显示绑定的具体渠道类型 -->
+      <section v-if="radars.length > 0" class="radars">
         <article
           v-for="r in radars"
           :key="r.id"
@@ -176,7 +195,12 @@ onMounted(load)
               {{ r.active ? 'LIVE' : 'PAUSED' }}
             </span>
             <h2 class="radar__query">{{ r.raw_query }}</h2>
-            <span class="radar__chan mono">{{ r.notify_channel }}</span>
+            <div class="radar__chans">
+              <span v-for="ch in radarChannels(r)" :key="ch" class="radar__chan mono">{{ ch }}</span>
+              <button class="radar__chan radar__chan--btn mono" type="button" @click="showBindModal = true">
+                点击绑定
+              </button>
+            </div>
           </div>
 
           <div class="radar__events">
@@ -203,6 +227,47 @@ onMounted(load)
           </div>
         </article>
       </section>
+
+      <!-- 绑定渠道弹窗：点击雷达卡片「未绑定」时弹出 -->
+      <transition name="fade">
+        <div v-if="showBindModal" class="modal" @click.self="showBindModal = false">
+          <div class="modal__card">
+            <button class="modal__close" type="button" @click="showBindModal = false" aria-label="关闭">×</button>
+            <p class="eyebrow">// BIND CHANNEL</p>
+            <h3 class="modal__title">绑定推送渠道</h3>
+            <p class="modal__sub">选择并绑定一个渠道，雷达命中的事件会主动通知你。</p>
+            <div class="chans">
+              <div v-for="c in channels" :key="c.type" class="chan">
+                <span class="chan__type mono">{{ c.type }}</span>
+                <button
+                  class="chan__btn"
+                  type="button"
+                  :disabled="!!bindingType || c.bound"
+                  @click="bind(c)"
+                >
+                  {{ bindingType === c.type ? '绑定中…' : '绑定' }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </transition>
+
+      <!-- 游客限额弹窗：命中上限（雷达/渠道）时弹出，引导登录/注册 -->
+      <transition name="fade">
+        <div v-if="showLimitModal" class="modal" @click.self="showLimitModal = false">
+          <div class="modal__card">
+            <button class="modal__close" type="button" @click="showLimitModal = false" aria-label="关闭">×</button>
+            <p class="eyebrow">// GUEST LIMIT</p>
+            <h3 class="modal__title">已达游客上限</h3>
+            <p class="modal__sub">{{ limitMsg }}</p>
+            <div class="modal__actions">
+              <router-link to="/signin" class="btn btn-primary" @click="showLimitModal = false">登录 / 注册解锁</router-link>
+              <button class="btn btn-ghost" type="button" @click="showLimitModal = false">稍后再说</button>
+            </div>
+          </div>
+        </div>
+      </transition>
     </div>
   </div>
 </template>
@@ -232,18 +297,9 @@ onMounted(load)
 .dash__back { font-size: 13px; }
 
 .dash__error { color: var(--amber); margin: 14px 0; }
-.dash__limit {
-  margin: 14px 0;
-  padding: 14px 16px;
-  color: var(--text);
-  background: rgba(184, 255, 60, 0.07);
-  border: 1px solid var(--line-strong);
-  border-radius: 14px;
-}
-.dash__limit a { color: var(--lime); font-weight: 500; }
 .dash__loading { color: var(--muted); margin-top: 24px; }
 
-/* ---------- onboarding（常驻创建框） ---------- */
+/* ---------- onboarding（同框：绑渠道 + 创建） ---------- */
 .onboard {
   margin-top: 8px;
   padding: 44px 40px 48px;
@@ -260,10 +316,39 @@ onMounted(load)
 }
 .onboard__title .hl { color: var(--lime); }
 .onboard__sub { color: var(--muted); margin-top: 12px; max-width: 480px; }
+
+.onboard__step {
+  display: flex;
+  gap: 16px;
+  margin-top: 30px;
+  padding-top: 26px;
+  border-top: 1px solid var(--line);
+}
+.onboard__step:first-of-type { border-top: none; padding-top: 0; margin-top: 26px; }
+.onboard__stepnum {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 12px;
+  color: var(--lime);
+  border: 1px solid var(--line-strong);
+}
+.onboard__stepbody { flex: 1; min-width: 0; }
+.onboard__steptitle {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 14px;
+}
+
 .onboard__form {
   display: flex;
   gap: 10px;
-  margin-top: 28px;
 }
 .onboard__input {
   flex: 1;
@@ -283,8 +368,14 @@ onMounted(load)
   box-shadow: 0 0 0 3px rgba(184, 255, 60, 0.12);
 }
 .onboard__send { font-size: 14px; padding: 14px 24px; white-space: nowrap; }
-.onboard__send:disabled { opacity: 0.6; cursor: default; }
+.onboard__send:disabled { opacity: 0.5; cursor: not-allowed; }
 
+.onboard__hint {
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
 .onboard__chips {
   display: flex;
   flex-wrap: wrap;
@@ -304,9 +395,7 @@ onMounted(load)
 }
 .chip:hover { color: var(--text); border-color: var(--lime); }
 
-.onboard__channels { margin-top: 38px; }
-.onboard__channels-title { color: var(--muted); font-size: 14px; margin-bottom: 14px; }
-.onboard__channels-title .mono { color: var(--muted-2); font-size: 12px; }
+/* ---------- 渠道 ---------- */
 .chans { display: flex; flex-wrap: wrap; gap: 12px; }
 .chan {
   display: flex;
@@ -318,7 +407,6 @@ onMounted(load)
   border-radius: 12px;
   transition: border-color 0.2s;
 }
-.chan.is-bound { border-color: var(--line-strong); }
 .chan__type { font-size: 12px; color: var(--text); text-transform: uppercase; letter-spacing: 0.08em; }
 .chan__btn {
   font-family: var(--font-mono);
@@ -333,19 +421,13 @@ onMounted(load)
 }
 .chan__btn:hover:not(:disabled) { background: rgba(184, 255, 60, 0.1); }
 .chan__btn:disabled { opacity: 0.5; cursor: default; }
-.chan__ok { font-size: 12px; color: var(--cyan); }
 
-/* ---------- 雷达列表 ---------- */
+/* ---------- 雷达列表（创建后出现） ---------- */
 .radars {
   display: flex;
   flex-direction: column;
   gap: 22px;
   margin-top: 40px;
-}
-.radars__empty {
-  color: var(--muted-2);
-  font-size: 13px;
-  padding: 20px 0;
 }
 .radar {
   padding: 24px;
@@ -369,20 +451,18 @@ onMounted(load)
   border-radius: 6px;
 }
 .radar__live.is-off { color: var(--muted-2); }
-.radar__live {
-  font-size: 10px;
-  letter-spacing: 0.16em;
-  color: var(--lime);
-  border: 1px solid var(--line-strong);
-  padding: 3px 8px;
-  border-radius: 6px;
-}
-.radar__live.is-off { color: var(--muted-2); }
 .radar__query {
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 19px;
   flex: 1;
+}
+.radar__chans {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-left: auto;
 }
 .radar__chan {
   font-size: 11px;
@@ -391,6 +471,72 @@ onMounted(load)
   padding: 3px 9px;
   border-radius: 6px;
 }
+.radar__chan--btn {
+  color: var(--amber);
+  border-color: var(--amber);
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+.radar__chan--btn:hover {
+  background: rgba(255, 176, 32, 0.12);
+  color: var(--amber);
+  border-color: var(--amber);
+}
+
+/* ---------- 绑定渠道弹窗 ---------- */
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.55);
+}
+.modal__card {
+  position: relative;
+  width: 100%;
+  max-width: 460px;
+  padding: 32px 30px;
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 40px 90px -34px rgba(0, 0, 0, 0.85);
+}
+.modal__close {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.modal__close:hover { color: var(--text); }
+.modal__title {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 26px;
+  margin-top: 10px;
+}
+.modal__sub {
+  color: var(--muted);
+  margin-top: 10px;
+  margin-bottom: 22px;
+  font-size: 14px;
+}
+.modal__actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.modal__actions .btn { font-size: 14px; padding: 12px 20px; }
+.fade-enter-active,
+.fade-leave-active { transition: opacity 0.2s; }
+.fade-enter-from,
+.fade-leave-to { opacity: 0; }
 
 .radar__events { display: flex; flex-direction: column; gap: 10px; }
 .radar__noev { color: var(--muted-2); font-size: 13px; }

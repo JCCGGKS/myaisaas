@@ -10,8 +10,8 @@ const uid = () =>
   (crypto.randomUUID && crypto.randomUUID()) ||
   `r_${Date.now()}_${Math.random().toString(36).slice(2)}`
 
-// 模拟游客限额（见 AGENTS.md）：游客最多 1 雷达 / 1 渠道
-const GUEST_LIMIT = { radar: 1, channel: 1 }
+// 模拟游客限额（见 AGENTS.md）：游客最多 1 雷达；演示用允许多渠道绑定（达到上限弹窗）
+const GUEST_LIMIT = { radar: 1, channel: 3 }
 
 // ---------- mock 数据（无后端时演示用） ----------
 const MOCK_RADARS = []
@@ -22,6 +22,31 @@ const MOCK_CHANNELS = [
   { type: 'email', bound: false },
   { type: 'webhook', bound: false },
 ]
+
+// 为雷达生成示例事件：即便未绑定渠道，事件流也能直接渲染到页面（用于演示/测试）
+function mockEventsFor(radar) {
+  const q = radar.raw_query || '监控目标'
+  return [
+    {
+      id: uid(),
+      radar_id: radar.id,
+      title: `【示例】${q} —— 相关动态 #1`,
+      source_url: 'https://example.com/event-1',
+      relevance_score: 0.92,
+      summarized: true,
+      created_at: new Date(Date.now() - 120_000).toISOString(),
+    },
+    {
+      id: uid(),
+      radar_id: radar.id,
+      title: `【示例】${q} —— 相关动态 #2`,
+      source_url: 'https://example.com/event-2',
+      relevance_score: 0.81,
+      summarized: true,
+      created_at: new Date(Date.now() - 600_000).toISOString(),
+    },
+  ]
+}
 
 function limitError(msg) {
   const err = new Error(msg)
@@ -54,7 +79,8 @@ async function request(path, options = {}) {
 // ---------- 对外接口 ----------
 
 // 创建雷达：自然语言 -> 后端 LLM 解析为结构化参数
-export async function createRadar(rawQuery) {
+// notifyChannel：创建时传入已绑定的推送渠道类型；未绑定时为空值占位（表示未绑定）
+export async function createRadar(rawQuery, notifyChannel = '') {
   if (!rawQuery || !rawQuery.trim()) throw new Error('监控目标不能为空')
   if (USE_MOCK) {
     await delay(600)
@@ -66,16 +92,19 @@ export async function createRadar(rawQuery) {
       raw_query: rawQuery.trim(),
       keywords: [],
       sources: [],
-      notify_channel: 'telegram',
+      notify_channel: notifyChannel,
+      channels: notifyChannel ? [notifyChannel] : [],
       active: true,
       created_at: new Date().toISOString(),
     }
     MOCK_RADARS.unshift(radar)
+    // 未绑渠道也生成示例事件，便于直接看到事件流渲染
+    MOCK_EVENTS[radar.id] = mockEventsFor(radar)
     return radar
   }
   return request('/radars', {
     method: 'POST',
-    body: JSON.stringify({ raw_query: rawQuery.trim() }),
+    body: JSON.stringify({ raw_query: rawQuery.trim(), notify_channel: notifyChannel }),
   })
 }
 
@@ -112,11 +141,16 @@ export async function bindChannel(type, recipient) {
     await delay(500)
     const bound = MOCK_CHANNELS.filter((c) => c.bound).length
     if (bound >= GUEST_LIMIT.channel) {
-      throw limitError('游客最多绑定 1 个渠道，登录解锁多渠道')
+      throw limitError(`游客最多绑定 ${GUEST_LIMIT.channel} 个渠道，登录解锁更多`)
     }
     const c = MOCK_CHANNELS.find((x) => x.type === type)
     if (!c) throw new Error(`unknown channel: ${type}`)
     c.bound = true
+    // 模拟后端行为：把渠道加入每个雷达的 channels 列表（多通道），去重
+    MOCK_RADARS.forEach((r) => {
+      if (!r.channels) r.channels = []
+      if (!r.channels.includes(type)) r.channels.push(type)
+    })
     return { ...c }
   }
   return request(`/channels/${type}/bind`, {
