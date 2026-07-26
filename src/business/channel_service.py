@@ -103,6 +103,15 @@ async def bind_channel(db: Session, user: User, channel_type: str, recipient: st
     else:
         bind(db, user, "email", recipient=address, verified=False, bind_token=token,
              bind_token_expire_at=expire)
+
+    # 本地开发便捷：跳过「点击验证邮件」步骤，绑定即自动 verified。
+    # 生产务必保留验证流程（settings.email.auto_verify=false），防垃圾推送。
+    if settings.email.auto_verify:
+        verify_by_token(db, user, token)
+        logger.info("email 绑定自动验证（auto_verify=true，仅本地开发）")
+        append_channel_to_radars(db, user.id, "email")
+        return {"type": "email", "bound": True, "verified": True}
+
     await _send_verification_email(address, token)
     append_channel_to_radars(db, user.id, "email")
     return {"type": "email", "bound": True, "verified": False}

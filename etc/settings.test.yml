@@ -41,6 +41,8 @@ email:
   smtp_use_tls: false
   smtp_use_ssl: false
   from_email: "noreply@watch-anything.local"
+  # 测试保持「需验证」语义（不自动验证），验证流程由用例覆盖
+  auto_verify: false
 
 telegram:
   bot_token: ""

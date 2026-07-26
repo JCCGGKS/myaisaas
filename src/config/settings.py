@@ -89,6 +89,9 @@ class EmailSettings(BaseModel):
     smtp_use_tls: bool = False     # STARTTLS
     smtp_use_ssl: bool = False     # SMTP over SSL（与 use_tls 互斥）
     from_email: str = "noreply@watch-anything.local"
+    # 本地开发便捷项：跳过「点击验证邮件」步骤，绑定即自动 verified。
+    # 仅本地/测试用；生产务必为 False（保留邮箱归属验证，防垃圾推送）。
+    auto_verify: bool = False
 
 
 class TelegramSettings(BaseModel):
