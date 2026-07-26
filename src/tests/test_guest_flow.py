@@ -92,10 +92,10 @@ def test_create_radar_empty_query_rejected(client: TestClient):
 
 
 def test_bind_backfills_radar_channel(client: TestClient):
-    # 先建雷达（未绑渠道，notify_channel 为空）
+    # 先建雷达（未绑渠道，notify_channels 初始为空）
     client.post("/api/radars", json={"raw_query": "雷达 A"})
-    # 绑定 telegram 后，雷达的 notify_channel 应回填为该渠道
+    # 绑定 telegram 后，雷达的 notify_channels 应追加该渠道
     r = client.post("/api/channels/telegram/bind")
     assert r.status_code == 200
     radars = client.get("/api/radars").json()
-    assert radars[0]["notify_channel"] == "telegram"
+    assert radars[0]["notify_channels"] == ["telegram"]

@@ -2,12 +2,16 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from config.settings import settings
 from data.engine import SessionLocal, init_db
 from main import app
 from model.event import Event
 from model.notification import Notification
 from model.radar import Radar
 from model.user import User
+
+# 测试环境不自动启动监控调度，避免后台任务干扰用例
+settings.monitor_autostart = False
 
 
 @pytest.fixture(autouse=True)

@@ -4,7 +4,7 @@
 """
 from data.engine import Session
 from dao.channel_dao import bind, count_bound, is_bound, list_bindings, update_recipient
-from dao.radar_dao import backfill_notify_channel
+from dao.radar_dao import append_channel_to_radars
 from config.settings import settings
 from model.user import User
 from utils.exceptions import AppError, LimitExceededError
@@ -45,7 +45,7 @@ def bind_channel(db: Session, user: User, channel_type: str, recipient: str = ""
             if recipient:
                 update_recipient(db, user, ct, recipient)
             result = {"type": ct, "bound": True, "verified": True}
-        backfill_notify_channel(db, user.id, ct)
+        append_channel_to_radars(db, user.id, ct)
         return result
 
     # 游客限额：绑定第一个后不能再绑第二个不同渠道
@@ -55,14 +55,14 @@ def bind_channel(db: Session, user: User, channel_type: str, recipient: str = ""
     if ct == "telegram":
         bind(db, user, ct, recipient="", verified=False)
         result = {"type": ct, "bound": True, "verified": False, "connect_url": _connect_url(user.id)}
-        backfill_notify_channel(db, user.id, ct)
+        append_channel_to_radars(db, user.id, ct)
         return result
 
     if not recipient:
         raise AppError(f"channel {ct} 需要 recipient（地址/URL）", status_code=422, code="invalid_input")
     bind(db, user, ct, recipient=recipient, verified=True)
     result = {"type": ct, "bound": True, "verified": True}
-    backfill_notify_channel(db, user.id, ct)
+    append_channel_to_radars(db, user.id, ct)
     return result
 
 

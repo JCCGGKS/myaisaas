@@ -24,7 +24,8 @@ def is_bound(db: Session, user: User, channel_type: str) -> bool:
 
 
 def bind(db: Session, user: User, channel_type: str, recipient: str = "", verified: bool = True) -> dict:
-    bindings = list(user.channel_bindings or [])
+    # 用 dict(x) 浅拷贝，避免原地修改被 SQLAlchemy 的 JSON 比较器误判为未变更
+    bindings = [dict(x) for x in (user.channel_bindings or [])]
     bindings.append({"channel_type": channel_type, "recipient": recipient, "verified": verified})
     user.channel_bindings = bindings
     db.add(user)
@@ -36,7 +37,7 @@ def bind(db: Session, user: User, channel_type: str, recipient: str = "", verifi
 
 def update_recipient(db: Session, user: User, channel_type: str, recipient: str) -> None:
     """Webhook 回填（telegram 拿到 chat_id 后）。"""
-    bindings = list(user.channel_bindings or [])
+    bindings = [dict(x) for x in (user.channel_bindings or [])]
     for b in bindings:
         if b.get("channel_type") == channel_type:
             b["recipient"] = recipient

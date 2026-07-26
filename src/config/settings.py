@@ -29,5 +29,27 @@ class Settings(BaseSettings):
     smtp_host: str = ""
     from_email: str = "noreply@watch-anything.local"
 
+    # ---------- 监控 / LLM（均可通过环境变量 WA_* 覆盖，保证灵活性） ----------
+    # LLM：OpenAI 兼容接口（可切 Claude / 国产模型）
+    llm_base_url: str = "https://api.openai.com/v1"
+    llm_api_key: str = ""          # 留空则解析/打分自动降级（不调用外部）
+    llm_model: str = "gpt-4o-mini"
+    llm_timeout: float = 20.0      # 单次 LLM 调用超时（秒）
+
+    # 相关性/重要性打分阈值：低于丢弃，高于留存并推送
+    relevance_threshold: float = 0.6
+
+    # 调度：轻量 asyncio 循环扫描间隔（秒）
+    scan_interval_seconds: int = 60
+    # 是否在应用启动时自动开启监控调度（测试可置 False）
+    monitor_autostart: bool = True
+
+    # 单次扫描每个数据源最多处理的原始条目数（防爆炸）
+    max_items_per_source: int = 20
+
+    # 数据源抓取：HTTP 超时与 UA
+    source_fetch_timeout: float = 10.0
+    source_user_agent: str = "WatchAnything/0.1 (+https://...)"
+
 
 settings = Settings()
