@@ -1,6 +1,6 @@
 <script setup>
-import { ref, onMounted, nextTick, computed } from 'vue'
-import { listRadars, listEvents, createRadar, listChannels, bindChannel, seedDemoEvents, getMe, logout } from '../services/api.js'
+import { ref, onMounted, onUnmounted, nextTick, computed } from 'vue'
+import { listRadars, listEvents, createRadar, listChannels, bindChannel, deleteRadar, getMe, logout } from '../services/api.js'
 
 const radars = ref([])
 const eventsByRadar = ref({})
@@ -97,18 +97,19 @@ function fillExample(ex) {
   newQuery.value = ex
 }
 
-// 灌入示例事件（演示）：触发真实 ingest 链路，事件过阈值后进入该雷达事件流
-const seeding = ref(false)
-async function seedDemo(r) {
-  if (seeding.value) return
-  seeding.value = true
+// 删除雷达：确认后删除（后端联删其下事件），刷新列表
+const deleting = ref(false)
+async function removeRadar(r) {
+  if (deleting.value) return
+  if (!window.confirm(`确定删除雷达「${r.raw_query}」？其下的事件也会一并删除。`)) return
+  deleting.value = true
   try {
-    await seedDemoEvents(r.id, r.keywords)
+    await deleteRadar(r.id)
     await load()
   } catch (e) {
-    error.value = e.message || '生成示例事件失败'
+    error.value = e.message || '删除失败'
   } finally {
-    seeding.value = false
+    deleting.value = false
   }
 }
 
@@ -160,7 +161,28 @@ const radarChannels = (r) =>
         ? [r.notify_channel]
         : []
 
-onMounted(load)
+// 短轮询：监控循环会持续产出真实事件，定时刷新让事件流自动出现（无需手动演示）
+const REFRESH_MS = 30_000
+let refreshTimer = null
+const refreshing = ref(false)
+
+function refresh() {
+  if (refreshing.value || loading.value) return
+  refreshing.value = true
+  load().finally(() => {
+    refreshing.value = false
+  })
+}
+
+onMounted(() => {
+  load()
+  refreshTimer = setInterval(() => {
+    if (!loading.value && !refreshing.value) load()
+  }, REFRESH_MS)
+})
+onUnmounted(() => {
+  if (refreshTimer) clearInterval(refreshTimer)
+})
 </script>
 
 <template>
@@ -270,17 +292,22 @@ onMounted(load)
                 点击绑定
               </button>
             </div>
+            <button class="radar__del mono" type="button" :disabled="deleting" @click="removeRadar(r)">
+              ✕ 删除
+            </button>
           </div>
 
           <div class="radar__events">
             <div class="radar__events-head">
               <span class="radar__events-title mono">事件流</span>
-              <button class="radar__seed mono" type="button" :disabled="seeding" @click="seedDemo(r)">
-                {{ seeding ? '生成中…' : '🎲 演示事件' }}
-              </button>
+              <div class="radar__events-actions">
+                <button class="radar__seed mono" type="button" :disabled="refreshing" @click="refresh">
+                  {{ refreshing ? '刷新中…' : '↻ 刷新' }}
+                </button>
+              </div>
             </div>
             <p v-if="!eventsByRadar[r.id] || eventsByRadar[r.id].length === 0" class="radar__noev mono">
-              暂无命中事件 — 监测持续进行中。点「🎲 演示事件」灌入示例。
+              暂无命中事件 — 监测持续进行中，命中即推送。
             </p>
             <a
               v-for="ev in eventsByRadar[r.id]"
@@ -293,8 +320,10 @@ onMounted(load)
               <span class="event__dot"></span>
               <div class="event__body">
                 <p class="event__title">{{ ev.title }}</p>
+                <p v-if="ev.summary && ev.summary !== ev.title" class="event__summary">{{ ev.summary }}</p>
                 <div class="event__meta mono">
                   <span>score {{ ev.relevance_score?.toFixed(2) }}</span>
+                  <span v-for="ch in (ev.pushed_channels || [])" :key="ch" class="event__ch">{{ ch }}</span>
                   <span>{{ fmtTime(ev.created_at) }}</span>
                 </div>
               </div>
@@ -630,6 +659,24 @@ onMounted(load)
   color: var(--amber);
   border-color: var(--amber);
 }
+.radar__del {
+  flex: none;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--muted-2);
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 11px;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+.radar__del:hover:not(:disabled) {
+  color: var(--amber);
+  border-color: var(--amber);
+  background: rgba(255, 176, 32, 0.1);
+}
+.radar__del:disabled { opacity: 0.5; cursor: default; }
 
 /* ---------- 绑定渠道弹窗 ---------- */
 .modal {
@@ -693,6 +740,7 @@ onMounted(load)
   justify-content: space-between;
   gap: 12px;
 }
+.radar__events-actions { display: flex; gap: 8px; }
 .radar__events-title {
   font-size: 11px;
   letter-spacing: 0.12em;
@@ -736,12 +784,29 @@ onMounted(load)
 }
 .event__body { flex: 1; }
 .event__title { font-size: 14.5px; color: var(--text); line-height: 1.45; }
+.event__summary {
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 .event__meta {
   display: flex;
+  flex-wrap: wrap;
   gap: 14px;
   margin-top: 6px;
   font-size: 11px;
   color: var(--muted-2);
+}
+.event__ch {
+  color: var(--lime);
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  padding: 1px 6px;
 }
 
 @media (max-width: 620px) {

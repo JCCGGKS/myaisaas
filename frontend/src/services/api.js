@@ -176,35 +176,12 @@ export async function bindChannel(type, recipient) {
   })
 }
 
-// 灌入示例事件（演示用）：用雷达自身关键词构造命中率=1.0 的条目，确保过阈值被保留。
-// 走真实 /api/ingest/webhook，触发打分→去重→落库→推送完整链路。
-export async function seedDemoEvents(radarId, keywords = []) {
-  const kws = Array.isArray(keywords) ? keywords : []
-  const base = kws.length ? kws.join(' ') : '相关动态'
-  const items = [
-    { title: `${base}：官方公布最新进展`, url: 'https://example.com/demo-1', content: `${base} 的示例内容，用于演示事件流。` },
-    { title: `${base}：行业媒体跟进报道`, url: 'https://example.com/demo-2', content: `${base} 的示例内容，用于演示事件流。` },
-  ]
+// 删除雷达（联删其事件）：路由 DELETE /radars/:id
+export async function deleteRadar(radarId) {
   if (USE_MOCK) {
-    await delay(300)
-    const evs = (MOCK_EVENTS[radarId] ||= [])
-    items.forEach((it, i) => {
-      evs.push({
-        id: uid(),
-        radar_id: radarId,
-        title: it.title,
-        source_url: it.url,
-        relevance_score: 0.95 - i * 0.1,
-        summary: true,
-        created_at: new Date().toISOString(),
-      })
-    })
-    return { ok: true, processed: items.length }
+    return { ok: true }
   }
-  return request('/ingest/webhook', {
-    method: 'POST',
-    body: JSON.stringify({ radar_id: radarId, items }),
-  })
+  return request(`/radars/${radarId}`, { method: 'DELETE' })
 }
 
 // ---------- 鉴权（JWT，cookie 自动携带/写入） ----------

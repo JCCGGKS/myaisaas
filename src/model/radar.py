@@ -31,4 +31,5 @@ class Radar(Base):
     last_scan_at = Column(DateTime(timezone=True), nullable=True)
     last_error = Column(Text, nullable=True)
     active = Column(Boolean, default=True, nullable=False)
+    deleted_at = Column(DateTime(timezone=True), nullable=True)  # 软删除标记：非空即已删除
     created_at = Column(DateTime(timezone=True), server_default=func.now())

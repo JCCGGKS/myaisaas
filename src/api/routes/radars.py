@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Query, Response
 from api.deps import get_current_user, get_db
 from business.radar_service import (
     create_radar,
+    delete_radar,
     get_radar,
     list_radars,
     pause_radar,
@@ -48,6 +49,12 @@ async def pause(radar_id: int, user: User = Depends(get_current_user), db=Depend
 @router.post("/{radar_id}/resume", response_model=RadarOut)
 async def resume(radar_id: int, user: User = Depends(get_current_user), db=Depends(get_db)):
     return RadarOut.model_validate(resume_radar(db, user, radar_id))
+
+
+@router.delete("/{radar_id}", status_code=200)
+async def delete(radar_id: int, user: User = Depends(get_current_user), db=Depends(get_db)):
+    delete_radar(db, user, radar_id)
+    return {"ok": True}
 
 
 @router.get("/{radar_id}/events", response_model=list[EventOut])
