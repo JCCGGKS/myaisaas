@@ -4,6 +4,9 @@ sqlalchemy>=2.0
 pydantic>=2.0
 pydantic-settings
 httpx
+pyyaml
+PyJWT
+bcrypt
 # 生产用 PostgreSQL + 向量检索（开发默认 SQLite，零配置）
 # psycopg[binary]
 # pgvector

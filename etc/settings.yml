@@ -1,0 +1,49 @@
+# Watch Anything — 后端配置文件
+#
+# 本文件为主配置源（取代原先散落在代码里的默认值）。
+# 优先级：环境变量 WA_*  >  本文件  >  Settings 类里的硬编码默认值。
+# 因此生产环境可用 WA_DATABASE_URL / WA_LLM_API_KEY / WA_SECRET_KEY 等覆盖，无需改文件。
+#
+# 注意：secret_key / token 等敏感项此处仅为开发默认值，生产务必用环境变量覆盖。
+
+# ---------------- 数据库 ----------------
+# 开发用 SQLite（零配置）；生产切 PostgreSQL，例如：
+# database_url: postgresql+psycopg://user:pass@host:5432/watch_anything
+database_url: "sqlite:///./watch_anything.db"
+
+# ---------------- 游客限额（MVP，见 AGENTS.md「游客模式与渠道绑定」） ----------------
+guest_radar_limit: 1
+guest_channel_limit: 1
+
+# ---------------- 应用 ----------------
+app_name: "Watch Anything"
+cors_origins:
+  - "*"
+
+# ---------------- 鉴权（轻量 MVP：token 即 user_id 的签名） ----------------
+# 生产务必用环境变量 WA_SECRET_KEY 覆盖为随机长串
+secret_key: "dev-insecure-secret-change-me-please-override"
+token_expire_hours: 720   # 30 天
+
+# ---------------- 外部依赖（通知渠道用，未配置时渠道可绑定但发送走 Fake） ----------------
+telegram_bot_token: ""
+smtp_host: ""
+from_email: "noreply@watch-anything.local"
+
+# ---------------- 监控 / LLM ----------------
+# LLM：OpenAI 兼容接口（可切 Claude / 国产模型）；llm_api_key 留空则解析/打分自动降级
+llm_base_url: "https://api.openai.com/v1"
+llm_api_key: ""
+llm_model: "gpt-4o-mini"
+llm_timeout: 20.0          # 单次 LLM 调用超时（秒）
+
+relevance_threshold: 0.6   # 相关性/重要性打分阈值：低于丢弃，高于留存并推送
+
+scan_interval_seconds: 60  # 轻量 asyncio 循环扫描间隔（秒）
+monitor_autostart: true    # 是否在应用启动时自动开启监控调度（测试可置 false）
+
+max_items_per_source: 20   # 单次扫描每个数据源最多处理的原始条目数（防爆炸）
+
+# 数据源抓取：HTTP 超时与 UA
+source_fetch_timeout: 10.0
+source_user_agent: "WatchAnything/0.1 (+https://...)"

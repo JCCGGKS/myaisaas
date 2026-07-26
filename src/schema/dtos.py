@@ -61,3 +61,10 @@ class AuthOut(BaseModel):
     token: str
     user_id: int
     is_guest: bool
+
+
+class AuthMeOut(BaseModel):
+    user_id: int
+    email: str | None
+    is_guest: bool
+    channel_bindings: list

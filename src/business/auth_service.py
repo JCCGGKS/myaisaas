@@ -13,7 +13,7 @@ from model.radar import Radar
 from model.user import User
 from utils.exceptions import AppError
 from utils.logging import get_logger
-from utils.security import issue_token
+from utils.security import hash_password, issue_token, verify_password
 
 logger = get_logger(__name__)
 
@@ -42,12 +42,21 @@ def upgrade_current_guest(
     if require_existing and (existing is None or existing.is_guest):
         raise AppError("账号不存在，请先注册", status_code=404)
 
-    if existing is not None and existing.id != guest.id:
+    if existing is not None and existing.id == guest.id:
+        # cookie 已对应此账号（已是登录态）：直接续期 token，不改动密码，
+        # 避免登录态用户在登录页重提交时误把密码覆盖成输入值（含输错场景）。
+        user = existing
+    elif existing is not None:
+        # 邮箱属于另一个真实账号：注册需校验密码一致（防冒用），登录需校验密码
+        if not verify_password(password, existing.password):
+            if require_existing:
+                raise AppError("密码错误", status_code=401)
+            raise AppError("该邮箱已注册，请用密码登录", status_code=409)
         _merge_guest_into(db, guest, existing)
         user = existing
     else:
         guest.email = email
-        guest.password = password
+        guest.password = hash_password(password)  # 哈希存储，不存明文
         user = guest
 
     user.is_guest = False
