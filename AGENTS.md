@@ -67,7 +67,7 @@
 src/
 ├── api/          # 路由/接口层（HTTP 入口），只做校验 + 调 business
 ├── business/     # 业务逻辑层（服务层），核心流程编排 + 通知子系统
-├── config/       # 配置层（pydantic-settings 加载环境变量）
+├── config/       # 配置层（pydantic-settings；读取 etc/settings.{env}.yml）
 ├── dao/          # 数据访问层（SQLAlchemy CRUD，屏蔽 ORM 细节）
 ├── data/         # 数据基础设施层（engine/session 初始化 + seed/迁移）
 ├── model/        # ORM 模型层（SQLAlchemy 表定义 + Base）
@@ -83,7 +83,7 @@ src/
 |---|---|---|
 | **api** | 路由/接口层 | `/api/radars`、`/api/radars/:id/events`、`/api/channels`、`/api/auth/*`、`/webhooks/telegram`；只校验参数 + 调 business |
 | **business** | 业务逻辑层 | 创建雷达时 LLM 解析自然语言 → 结构化参数、监控循环编排、事件相关性过滤、通知分发；**通知子系统**（`ChannelFactory` + 各渠道策略）放在 `business/notifier/` |
-| **config** | 配置层 | DB URL、JWT/密钥、LLM key、Telegram token、Redis 地址 |
+| **config** | 配置层 | DB URL、JWT/密钥、LLM key、Telegram token、Redis 地址；从 `etc/settings.{env}.yml` 按 `APP_ENV` 加载，嵌套 struct 管理 |
 | **dao** | 数据访问层 | Radar/Event/Notification 的写与查，对 business 屏蔽 ORM |
 | **model** | ORM 模型层 | `User` / `Radar` / `Event` / `Notification` 表定义 + `Base` |
 | **schema** | 接口契约层 | 创建雷达入参、事件出参等 Pydantic DTO |
@@ -93,6 +93,26 @@ src/
 | **utils** | 通用工具层 | ID 生成、时间格式化、HTTP 包装、日志初始化、自定义异常 |
 
 > 设计要点：依赖方向 `api → business → dao → model`，配置/工具由 `config`/`utils` 横向提供；`pkgs` 封装一切外部不确定依赖，便于替换与测试。
+
+## 配置管理约定（etc/ 按环境分文件 + 嵌套 struct）
+
+> 所有相关配置集中在仓库根的 `etc/` 目录（与 `src/` 同层级）。采用**按环境分文件 + 嵌套 struct** 方式管理。
+
+- **目录与文件**：`etc/` 下每个环境一个文件，命名 `settings.{env}.yml`
+  （当前：`settings.local.yml` / `settings.test.yml` / `settings.prod.yml`）。
+- **环境选择**：由**进程环境变量 `APP_ENV`**（`local` / `test` / `prod`）决定加载哪个文件；
+  **未设置 `APP_ENV` 时默认读取 `local`**。`src/config/settings.py` 据此拼出
+  `etc/settings.{APP_ENV}.yml` 并加载（启动时有 `INFO 配置环境 APP_ENV=...` 日志）。
+- **示例模板**：`etc/settings.local.example.yml` 是带占位值与注释的示例，
+  复制为 `etc/settings.local.yml` 后按需修改即可，不把真实密钥提交进仓库。
+- **嵌套 struct（结构嵌入）**：配置按「域」分组，相同类别归入同一个结构下；
+  每个域对应 `src/config/settings.py` 里的一个 pydantic 子模型（struct），如
+  `database` / `guest` / `app` / `auth` / `csrf` / `email` / `telegram` / `llm` / `monitor` / `source`。
+  代码以结构化方式读取，如 `settings.email.smtp_host`、`settings.monitor.relevance_threshold`。
+- **覆盖优先级**：环境变量 `WA_*`  >  `etc/settings.{env}.yml`  >  `Settings` 类默认值。
+  - 嵌套字段用**双下划线**分隔：`WA_EMAIL__SMTP_HOST`、`WA_LLM__API_KEY`、
+    `WA_AUTH__SECRET_KEY`、`WA_DATABASE__URL` 等。
+  - `APP_ENV` 本身是**普通进程环境变量**（非 `WA_` 前缀），在 shell / 容器 `environment` 中设置。
 
 ## 通知子系统设计（策略模式 + 工厂模式）
 
