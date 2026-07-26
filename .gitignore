@@ -226,3 +226,4 @@ reports
 *.db-journal
 *.txt
 etc/settings.local.yml
+logs 

@@ -76,3 +76,15 @@ monitor:
 source:
   fetch_timeout: 10.0
   user_agent: "WatchAnything/0.1 (+https://...)"
+
+log:
+  # 控制台输出开关
+  console_enabled: true
+  # 文件输出开关（写入 <dir>/watch_anything.log）
+  file_enabled: true
+  # 单文件字节上限，超过则滚动到 .1/.2...（0 表示不限制大小）
+  max_bytes: 10485760
+  # 保留的备份文件个数（不含当前文件）
+  backup_count: 5
+  # 日志文件根目录（相对路径基于仓库根，即与 etc/ 同级）
+  dir: "logs"

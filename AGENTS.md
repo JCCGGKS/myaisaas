@@ -107,7 +107,7 @@ src/
   复制为 `etc/settings.local.yml` 后按需修改即可，不把真实密钥提交进仓库。
 - **嵌套 struct（结构嵌入）**：配置按「域」分组，相同类别归入同一个结构下；
   每个域对应 `src/config/settings.py` 里的一个 pydantic 子模型（struct），如
-  `database` / `guest` / `app` / `auth` / `csrf` / `email` / `telegram` / `llm` / `monitor` / `source`。
+  `database` / `guest` / `app` / `auth` / `csrf` / `email` / `telegram` / `llm` / `monitor` / `source` / `log`。
   代码以结构化方式读取，如 `settings.email.smtp_host`、`settings.monitor.relevance_threshold`。
 - **覆盖优先级**：环境变量 `WA_*`  >  `etc/settings.{env}.yml`  >  `Settings` 类默认值。
   - 嵌套字段用**双下划线**分隔：`WA_EMAIL__SMTP_HOST`、`WA_LLM__API_KEY`、

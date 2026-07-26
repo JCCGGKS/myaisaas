@@ -4,7 +4,8 @@
   由进程环境变量 `APP_ENV` 选择（local / test / prod），未设置默认 `local`。
 - 配置按「域」分组：每个一级键对应一个 struct（pydantic 子模型），如
   `email` / `telegram` / `llm` / `monitor` / `auth` / `app` / `csrf` / `guest` /
-  `database` / `source`。读取时即 `settings.email.smtp_host` 这种结构化访问。
+  `database` / `source` / `log`（含控制台/文件开关、目录、大小轮转参数）。
+  读取时即 `settings.email.smtp_host` 这种结构化访问。
 - 环境变量（WA_ 前缀，或 .env）优先级高于 YAML，生产可用其覆盖敏感/环境相关项；
   嵌套字段用双下划线分隔，如 `WA_EMAIL__SMTP_HOST`、`WA_LLM__API_KEY`。
 - 类内默认值仅作为 YAML 缺失时的兜底。
@@ -129,6 +130,19 @@ class SourceSettings(BaseModel):
     user_agent: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0"
 
 
+class LogSettings(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    # 日志输出：控制台 / 文件开关，及文件根目录（相对路径基于仓库根，如 logs）
+    console_enabled: bool = True
+    file_enabled: bool = True
+    # 日志文件根目录（相对路径解析到仓库根，即与 etc/ 同级）
+    dir: str = "logs"
+    # 文件轮转：单文件字节上限，超过则滚动到 .1/.2...；0 表示不限制大小
+    max_bytes: int = 10 * 1024 * 1024
+    # 文件轮转：保留的备份文件个数（不含当前文件）
+    backup_count: int = 5
+
+
 class YamlConfigSettingsSource(PydanticBaseSettingsSource):
     """从 YAML 文件读取配置作为默认值（优先级低于环境变量 WA_*）。
 
@@ -155,7 +169,13 @@ class YamlConfigSettingsSource(PydanticBaseSettingsSource):
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_prefix="WA_", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_prefix="WA_",
+        # 嵌套字段用双下划线分隔，如 WA_LOG__MAX_BYTES / WA_LLM__API_KEY
+        env_nested_delimiter="__",
+        extra="ignore",
+    )
 
     database: DatabaseSettings = DatabaseSettings()
     guest: GuestSettings = GuestSettings()
@@ -167,6 +187,7 @@ class Settings(BaseSettings):
     llm: LlmSettings = LlmSettings()
     monitor: MonitorSettings = MonitorSettings()
     source: SourceSettings = SourceSettings()
+    log: LogSettings = LogSettings()
 
     @classmethod
     def settings_customise_sources(

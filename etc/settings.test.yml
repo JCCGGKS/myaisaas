@@ -64,3 +64,13 @@ monitor:
 source:
   fetch_timeout: 10.0
   user_agent: "WatchAnything/0.1 (+https://...)"
+
+log:
+  # 测试环境：关闭文件日志，避免产生 logs 目录与文件
+  console_enabled: true
+  file_enabled: false
+  # 单文件字节上限，超过则滚动到 .1/.2...（0 表示不限制大小）
+  max_bytes: 10485760
+  # 保留的备份文件个数（不含当前文件）
+  backup_count: 5
+  dir: "logs"
