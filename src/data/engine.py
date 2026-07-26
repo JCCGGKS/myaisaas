@@ -19,12 +19,39 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False
 
 
 def init_db() -> None:
-    """创建全部表（MVP 用 create_all，后续迁移交给 Alembic）。"""
+    """创建全部表（MVP 用 create_all，后续迁移交给 Alembic）。
+
+    对 SQLite 等不支持「自动追加列」的引擎，create_all 不会给已存在的表补列，
+    这里额外做一次「补齐缺失列」，保证模型演进时既有数据不被清空。
+    """
     from model.base import Base
     import model  # noqa: F401  确保模型注册到 Base
 
     Base.metadata.create_all(bind=engine)
+    _add_missing_columns()
     logger.info("数据库表已初始化: %s", settings.database_url)
+
+
+def _add_missing_columns() -> None:
+    """为已存在的表补齐模型里新增、但库里还没有的列（MVP 轻量迁移）。"""
+    from sqlalchemy import inspect, text
+
+    from model.base import Base
+    import model  # noqa: F401  确保模型注册到 Base
+
+    inspector = inspect(engine)
+    for table in Base.metadata.tables.values():
+        if not inspector.has_table(table.name):
+            continue
+        existing = {c["name"] for c in inspector.get_columns(table.name)}
+        for col in table.columns:
+            if col.name in existing:
+                continue
+            # 简单列（可空）直接 ALTER ADD；SQLite 对可空列支持良好
+            col_type = col.type.compile(dialect=engine.dialect)
+            with engine.begin() as conn:
+                conn.execute(text(f"ALTER TABLE {table.name} ADD COLUMN {col.name} {col_type}"))
+            logger.info("补齐缺失列 %s.%s (%s)", table.name, col.name, col_type)
 
 
 def get_session() -> Generator[Session, None, None]:

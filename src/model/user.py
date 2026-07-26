@@ -17,6 +17,8 @@ class User(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     device_id = Column(String(64), unique=True, index=True, nullable=True)
     email = Column(String(255), unique=True, index=True, nullable=True)
+    # 昵称（注册可选，便于展示；不强制唯一）
+    name = Column(String(255), nullable=True)
     # 登录凭证：bcrypt 哈希（绝不存明文），约 60 字符
     password = Column(String(255), nullable=True)
     is_guest = Column(Boolean, default=True, nullable=False)

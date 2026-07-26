@@ -55,6 +55,7 @@ class ChannelBind(BaseModel):
 class AuthIn(BaseModel):
     email: str
     password: str
+    name: str = ""
 
 
 class AuthOut(BaseModel):
@@ -66,5 +67,6 @@ class AuthOut(BaseModel):
 class AuthMeOut(BaseModel):
     user_id: int
     email: str | None
+    name: str | None
     is_guest: bool
     channel_bindings: list

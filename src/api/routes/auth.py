@@ -22,7 +22,7 @@ def _clear_cookie(response: Response) -> None:
 async def register(payload: AuthIn, response: Response, user: User = Depends(get_current_user), db=Depends(get_db)):
     from business.auth_service import upgrade_current_guest
 
-    _, token = upgrade_current_guest(db, user, payload.email, payload.password, require_existing=False)
+    _, token = upgrade_current_guest(db, user, payload.email, payload.password, name=payload.name, require_existing=False)
     _set_cookie(response, token)
     return AuthOut(token=token, user_id=user.id, is_guest=False)
 
@@ -31,7 +31,7 @@ async def register(payload: AuthIn, response: Response, user: User = Depends(get
 async def login(payload: AuthIn, response: Response, user: User = Depends(get_current_user), db=Depends(get_db)):
     from business.auth_service import upgrade_current_guest
 
-    _, token = upgrade_current_guest(db, user, payload.email, payload.password, require_existing=True)
+    _, token = upgrade_current_guest(db, user, payload.email, payload.password, name=payload.name, require_existing=True)
     _set_cookie(response, token)
     return AuthOut(token=token, user_id=user.id, is_guest=False)
 
@@ -41,6 +41,7 @@ async def me(user: User = Depends(get_current_user)):
     return AuthMeOut(
         user_id=user.id,
         email=user.email,
+        name=user.name,
         is_guest=user.is_guest,
         channel_bindings=user.channel_bindings or [],
     )

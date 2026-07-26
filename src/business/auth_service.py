@@ -32,7 +32,7 @@ def _merge_guest_into(db: Session, guest: User, target: User) -> None:
 
 
 def upgrade_current_guest(
-    db: Session, guest: User, email: str, password: str, require_existing: bool = False
+    db: Session, guest: User, email: str, password: str, name: str = "", require_existing: bool = False
 ) -> tuple[User, str]:
     email = (email or "").strip().lower()
     if not email or not password:
@@ -56,6 +56,7 @@ def upgrade_current_guest(
         user = existing
     else:
         guest.email = email
+        guest.name = (name or "").strip() or None  # 昵称可选
         guest.password = hash_password(password)  # 哈希存储，不存明文
         user = guest
 

@@ -47,3 +47,14 @@ def test_logout_clears_cookie(client: TestClient):
     r = client.get("/api/auth/me")
     assert r.status_code == 200
     assert r.json()["is_guest"] is True
+
+
+def test_register_persists_name(client: TestClient):
+    # 注册时带昵称 → /me 应返回该昵称
+    client.post("/api/auth/register", json={"email": "named@example.com", "password": "pw123", "name": "小雷达"})
+    r = client.get("/api/auth/me")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["is_guest"] is False
+    assert body["name"] == "小雷达"
+    assert body["email"] == "named@example.com"
