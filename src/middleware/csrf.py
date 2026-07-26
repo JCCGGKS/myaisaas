@@ -36,7 +36,11 @@ class CSRFOriginMiddleware:
         host = headers.get("host", "")
         proto = headers.get("x-forwarded-proto") or scope.get("scheme") or "http"
         same_origin = f"{proto}://{host}"
+        # 受信源 = 显式 csrf.trusted_origins ∪ 具体的 app.cors_origins
+        # （cors_origins 为 "*" 时不可信，不合并，避免任意站点绕过 CSRF 校验）
         trusted = set(settings.csrf.trusted_origins)
+        if "*" not in settings.app.cors_origins:
+            trusted |= set(settings.app.cors_origins)
         if origin == same_origin or origin in trusted:
             await self.app(scope, receive, send)
             return

@@ -225,3 +225,4 @@ reports
 *.db
 *.db-journal
 *.txt
+etc/settings.local.yml

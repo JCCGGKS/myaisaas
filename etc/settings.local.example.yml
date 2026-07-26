@@ -1,0 +1,78 @@
+# Watch Anything — 本地配置示例（模板）
+#
+# 用法：复制本文件为 settings.local.yml 并按需修改：
+#   cp etc/settings.local.example.yml etc/settings.local.yml
+#
+# 配置文件按「域」分组，每个一级键对应一个 struct（见 src/config/settings.py 的子模型）。
+# 加载规则：进程环境变量 APP_ENV 决定读取 etc/settings.{APP_ENV}.yml；
+#   APP_ENV=local 或不设置 → settings.local.yml（即本示例复制后的文件）
+#   APP_ENV=test  → settings.test.yml
+#   APP_ENV=prod → settings.prod.yml
+# 优先级：环境变量 WA_*  >  YAML 文件  >  Settings 类里的默认值。
+# 嵌套字段用双下划线覆盖，例如 WA_EMAIL__SMTP_HOST、WA_LLM__API_KEY。
+#
+# 本文件仅为示例，含占位值；真实敏感项请通过环境变量注入，不要提交到仓库。
+
+database:
+  # 开发用 SQLite（零配置）；无需改动
+  url: "sqlite:///./watch_anything.db"
+
+guest:
+  radar_limit: 1
+  channel_limit: 1
+
+app:
+  name: "Watch Anything"
+  cors_origins:
+    - "*"
+  # 后端对外绝对地址（拼接验证邮件/回调链接用）
+  backend_base_url: "http://127.0.0.1:8000"
+
+auth:
+  # 开发默认值即可；生产务必用 WA_AUTH__SECRET_KEY 覆盖为随机长串
+  secret_key: "dev-insecure-secret-change-me-please-override"
+  token_expire_hours: 720
+  # 开发走 http 必须为 false，否则浏览器丢弃 Secure cookie
+  cookie_secure: false
+
+csrf:
+  enabled: true
+  trusted_origins:
+    - "http://localhost:5173"
+    - "http://127.0.0.1:5173"
+    - "http://localhost:5174"
+    - "http://127.0.0.1:5174"
+
+email:
+  # 留空则 EmailChannel 退回 mock（不真发）。本地想真发可起 MailHog：
+  #   docker run -p 1025:1025 -p 8025:8025 mailhog/mailhog
+  # 浏览器打开 http://localhost:8025 查看捕获的邮件。
+  smtp_host: "localhost"
+  smtp_port: 1025
+  smtp_user: ""
+  smtp_password: ""
+  smtp_use_tls: false
+  smtp_use_ssl: false
+  from_email: "noreply@watch-anything.local"
+
+telegram:
+  # 可选：实现 Telegram 推送时填写；留空则发送走 mock
+  bot_token: ""
+  bot_username: ""
+
+llm:
+  # api_key 留空则自然语言解析/相关性打分自动降级（不调用外部）
+  base_url: "https://api.openai.com/v1"
+  api_key: ""
+  model: "gpt-4o-mini"
+  timeout: 20.0
+
+monitor:
+  relevance_threshold: 0.6
+  scan_interval_seconds: 60
+  autostart: true
+  max_items_per_source: 20
+
+source:
+  fetch_timeout: 10.0
+  user_agent: "WatchAnything/0.1 (+https://...)"

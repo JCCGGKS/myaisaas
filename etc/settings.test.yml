@@ -1,0 +1,64 @@
+# Watch Anything — 测试 / CI 配置（APP_ENV=test）
+#
+# 自动化测试与 CI 使用的配置。CSRF、监控自启由 conftest.py 在用例层面进一步关闭，
+# 此处保持保守默认值即可。敏感项一律留空，避免依赖外部服务。
+# 加载方式：APP_ENV=test 时读取本文件。
+
+database:
+  # 测试在 src/ 下运行，相对路径 SQLite 即可（也可用 WA_DATABASE__URL 覆盖）
+  url: "sqlite:///./watch_anything.db"
+
+guest:
+  radar_limit: 1
+  channel_limit: 1
+
+app:
+  name: "Watch Anything"
+  cors_origins:
+    - "*"
+  backend_base_url: "http://127.0.0.1:8000"
+
+auth:
+  secret_key: "test-secret-change-me"
+  token_expire_hours: 720
+  cookie_secure: false
+
+csrf:
+  # conftest 会再显式关闭；此处默认开启以覆盖真实校验逻辑
+  enabled: true
+  trusted_origins:
+    - "http://localhost:5173"
+    - "http://127.0.0.1:5173"
+    - "http://localhost:5174"
+    - "http://127.0.0.1:5174"
+
+email:
+  # 测试不真发邮件：留空走 mock
+  smtp_host: ""
+  smtp_port: 1025
+  smtp_user: ""
+  smtp_password: ""
+  smtp_use_tls: false
+  smtp_use_ssl: false
+  from_email: "noreply@watch-anything.local"
+
+telegram:
+  bot_token: ""
+  bot_username: ""
+
+llm:
+  # 测试环境不调用外部 LLM，留空降级
+  base_url: "https://api.openai.com/v1"
+  api_key: ""
+  model: "gpt-4o-mini"
+  timeout: 20.0
+
+monitor:
+  relevance_threshold: 0.6
+  scan_interval_seconds: 60
+  autostart: false
+  max_items_per_source: 20
+
+source:
+  fetch_timeout: 10.0
+  user_agent: "WatchAnything/0.1 (+https://...)"

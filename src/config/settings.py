@@ -1,5 +1,7 @@
-"""配置层：以 YAML 文件为主配置源（仓库根 etc/settings.yml），环境变量 WA_* 可覆盖。
+"""配置层：以 YAML 文件为主配置源（仓库根 etc/settings.{APP_ENV}.yml），环境变量 WA_* 可覆盖。
 
+- 按环境分文件：`etc/settings.local.yml` / `settings.test.yml` / `settings.prod.yml`；
+  由进程环境变量 `APP_ENV` 选择（local / test / prod），未设置默认 `local`。
 - 配置按「域」分组：每个一级键对应一个 struct（pydantic 子模型），如
   `email` / `telegram` / `llm` / `monitor` / `auth` / `app` / `csrf` / `guest` /
   `database` / `source`。读取时即 `settings.email.smtp_host` 这种结构化访问。
@@ -10,6 +12,9 @@
 开发默认使用 SQLite（零配置）；生产在 YAML / 环境变量设置 database.url 为 PostgreSQL
 （如 postgresql+psycopg://user:pass@host:5432/watch_anything）。
 """
+
+import logging
+import os
 from pathlib import Path
 
 import yaml
@@ -20,9 +25,14 @@ from pydantic_settings import (
     SettingsConfigDict,
 )
 
-# 仓库根 etc/settings.yml（settings.py 位于 src/config/，故向上两级到仓库根）
+logger = logging.getLogger(__name__)
+
+# 仓库根 etc/ 下按环境分文件：settings.{APP_ENV}.yml
+# APP_ENV 取进程环境变量（local / test / prod）；未设置则默认 local。
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-CONFIG_YAML = PROJECT_ROOT / "etc" / "settings.yml"
+APP_ENV = (os.environ.get("APP_ENV") or "local").lower()
+CONFIG_YAML = PROJECT_ROOT / "etc" / f"settings.{APP_ENV}.yml"
+logger.info("配置环境 APP_ENV=%s，加载文件=%s", APP_ENV, CONFIG_YAML)
 
 
 # ---------------- 各域 struct（子模型） ----------------

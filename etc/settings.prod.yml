@@ -1,0 +1,70 @@
+# Watch Anything — 生产配置（APP_ENV=prod）
+#
+# 生产环境：敏感项一律留空，必须由环境变量覆盖（不要把密钥写进仓库）。
+# 嵌套字段用双下划线覆盖，例如：
+#   WA_DATABASE__URL=postgresql+psycopg://user:pass@db:5432/watch_anything
+#   WA_AUTH__SECRET_KEY=<随机长串>
+#   WA_AUTH__COOKIE_SECURE=true
+#   WA_LLM__API_KEY=<key>
+#   WA_EMAIL__SMTP_HOST=<smtp>  WA_EMAIL__SMTP_USER=...  WA_EMAIL__SMTP_PASSWORD=...
+#   WA_TELEGRAM__BOT_TOKEN=<token>  WA_TELEGRAM__BOT_USERNAME=<username>
+# 加载方式：APP_ENV=prod 时读取本文件。
+
+database:
+  # 务必用 WA_DATABASE__URL 覆盖为真实 PostgreSQL 连接串
+  url: "postgresql+psycopg://USER:PASS@HOST:5432/watch_anything"
+
+guest:
+  radar_limit: 1
+  channel_limit: 1
+
+app:
+  name: "Watch Anything"
+  # 改为真实前端域名（不要用 "*"）
+  cors_origins:
+    - "https://app.watch-anything.example.com"
+  backend_base_url: "https://api.watch-anything.example.com"
+
+auth:
+  # 务必用 WA_AUTH__SECRET_KEY 覆盖
+  secret_key: ""
+  token_expire_hours: 720
+  # 生产 HTTPS 必须为 true
+  cookie_secure: true
+
+csrf:
+  enabled: true
+  # 改为真实前端域名
+  trusted_origins:
+    - "https://app.watch-anything.example.com"
+
+email:
+  # 用 WA_EMAIL__* 覆盖为真实 SMTP（云厂中继 / 邮件服务）
+  smtp_host: ""
+  smtp_port: 465
+  smtp_user: ""
+  smtp_password: ""
+  smtp_use_tls: false
+  smtp_use_ssl: true
+  from_email: "noreply@watch-anything.example.com"
+
+telegram:
+  bot_token: ""
+  bot_username: ""
+
+llm:
+  base_url: "https://api.openai.com/v1"
+  # 用 WA_LLM__API_KEY 覆盖
+  api_key: ""
+  model: "gpt-4o-mini"
+  timeout: 20.0
+
+monitor:
+  relevance_threshold: 0.6
+  scan_interval_seconds: 60
+  autostart: true
+  max_items_per_source: 20
+
+source:
+  fetch_timeout: 10.0
+  user_agent: "WatchAnything/0.1 (+https://...)"
