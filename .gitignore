@@ -224,3 +224,4 @@ reports
 # Local SQLite database (generated at runtime, never commit)
 *.db
 *.db-journal
+*.txt
