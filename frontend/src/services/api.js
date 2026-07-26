@@ -67,6 +67,9 @@ class ApiError extends Error {
 // ---------- 真实请求封装 ----------
 async function request(path, options = {}) {
   const res = await fetch(`${API_BASE}${path}`, {
+    // 必须带凭据，浏览器才会自动携带/存储后端下发的身份 cookie（wa_auth / wa_guest）。
+    // 即便走 vite 代理同域也无害；跨域时（前端独立部署）这是必需的。
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     ...options,
   })

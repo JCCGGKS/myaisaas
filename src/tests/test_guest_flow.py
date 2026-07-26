@@ -7,11 +7,11 @@ from fastapi.testclient import TestClient
 
 
 def test_guest_identified_and_empty(client: TestClient):
-    # 首次请求无 cookie → 后端识别游客并写回 wa_uid
+    # 首次请求无 cookie → 后端识别游客并写回 wa_guest
     r = client.get("/api/radars")
     assert r.status_code == 200
     assert r.json() == []
-    assert "wa_uid" in client.cookies
+    assert "wa_guest" in client.cookies
 
 
 def test_guest_radar_limit(client: TestClient):
@@ -69,7 +69,7 @@ def test_register_lifts_guest_limit(client: TestClient):
     r = client.post("/api/auth/register", json={"email": "user@example.com", "password": "pw123"})
     assert r.status_code == 200
     assert r.json()["is_guest"] is False
-    assert "wa_uid" in client.cookies  # 写入 token cookie
+    assert "wa_auth" in client.cookies  # 写入 token cookie
 
     # 限额解除：可继续建雷达、绑更多渠道
     r = client.post("/api/radars", json={"raw_query": "雷达 B"})

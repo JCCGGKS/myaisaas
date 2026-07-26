@@ -1,7 +1,7 @@
 """鉴权工具（MVP）：JWT（HS256）+ 密码哈希（bcrypt）。
 
-- 登录/注册后签发 JWT，写入 wa_uid cookie（httpOnly）；
-- 游客 cookie 为 device_id（非 JWT），resolve_user 据此 upsert 游客；
+- 登录/注册后签发 JWT，写入 `wa_auth` cookie（HttpOnly + Secure + SameSite=Strict）；
+- 游客标识存于独立的 `wa_guest` cookie（不透明随机串），与 JWT 分桶；
 - 密码以 bcrypt 哈希存储，绝不存明文；
 - 生产务必用环境变量 WA_SECRET_KEY 覆盖为随机长串。
 """
@@ -31,7 +31,8 @@ def issue_token(user_id: int, is_guest: bool = False) -> str:
 def verify_token(token: str) -> int | None:
     """校验 JWT，成功返回 user_id，失败返回 None。
 
-    游客的 device_id 不是合法 JWT，decode 抛错后返回 None，由上层走游客分支。
+    仅用于校验 `wa_auth` cookie 中的登录态；游客标识存于独立的 `wa_guest`
+    cookie，不在此解析。校验失败一律返回 None，由上层判定为「未登录」。
     """
     if not token:
         return None

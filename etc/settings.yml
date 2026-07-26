@@ -24,6 +24,10 @@ cors_origins:
 # 生产务必用环境变量 WA_SECRET_KEY 覆盖为随机长串
 secret_key: "dev-insecure-secret-change-me-please-override"
 token_expire_hours: 720   # 30 天
+# Cookie 的 Secure 属性：仅 HTTPS 才发送。开发环境走 http，必须为 false，
+# 否则浏览器会丢弃 Secure cookie，游客标识无法持久化（每次请求都是新游客）。
+# 生产环境用 WA_COOKIE_SECURE=true 覆盖。
+cookie_secure: false
 
 # ---------------- 外部依赖（通知渠道用，未配置时渠道可绑定但发送走 Fake） ----------------
 telegram_bot_token: ""

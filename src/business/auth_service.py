@@ -3,7 +3,7 @@
 - 游客达到限额后，前端引导注册/登录；
 - 注册/登录时把 cookie 对应的游客数据（雷达 + 渠道绑定）合并进账号，
   并置 is_guest=False，从而解除限额；
-- 返回签名 token，写入同一 wa_uid cookie。
+- 返回签名 token，写入 `wa_auth` cookie（同时清除 `wa_guest` 游客 cookie）。
 """
 from sqlalchemy import update
 

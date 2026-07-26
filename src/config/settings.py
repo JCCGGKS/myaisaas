@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     secret_key: str = "dev-insecure-secret-change-me-please-override"
     token_expire_hours: int = 24 * 30
 
+    # Cookie 安全属性：生产必须为 True（仅 HTTPS 发送），测试环境置 False
+    # 以兼容 TestClient 走 http 时不发送 secure cookie。
+    cookie_secure: bool = True
+
     # 外部依赖（通知渠道用，未配置时渠道可绑定但发送走 Fake）
     telegram_bot_token: str = ""
     smtp_host: str = ""

@@ -37,7 +37,7 @@ def test_me_user_id_matches_register(client: TestClient):
 def test_logout_clears_cookie(client: TestClient):
     # 登录后持有 token cookie
     client.post("/api/auth/register", json={"email": "out@example.com", "password": "pw123"})
-    assert "wa_uid" in client.cookies
+    assert "wa_auth" in client.cookies
 
     r = client.post("/api/auth/logout")
     assert r.status_code == 200
