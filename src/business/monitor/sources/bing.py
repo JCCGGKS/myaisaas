@@ -42,9 +42,9 @@ class BingWebSource(Source):
     async def fetch(self, state: dict | None = None) -> list[RawItem]:
         try:
             async with httpx.AsyncClient(
-                timeout=settings.source_fetch_timeout,
+                timeout=settings.source.fetch_timeout,
                 headers={
-                    "User-Agent": settings.source_user_agent,
+                    "User-Agent": settings.source.user_agent,
                     "Accept-Language": "zh-CN,zh;q=0.9",
                 },
                 follow_redirects=True,
@@ -77,4 +77,4 @@ class BingWebSource(Source):
             snippet = re.sub(r"<[^>]+>", " ", sm.group(1) if sm else "").strip() if sm else ""
             snippet = unescape(re.sub(r"\s+", " ", snippet))[:500]
             items.append(RawItem(title=title, url=href or None, content=snippet, source_id=self.source_id()))
-        return items[: settings.max_items_per_source]
+        return items[: settings.monitor.max_items_per_source]

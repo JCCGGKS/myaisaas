@@ -16,16 +16,16 @@ ALGORITHM = "HS256"
 
 
 def issue_token(user_id: int, is_guest: bool = False) -> str:
-    """签发 JWT，载荷 sub=user_id，exp 取自 settings.token_expire_hours。"""
+    """签发 JWT，载荷 sub=user_id，exp 取自 settings.auth.token_expire_hours。"""
     now = datetime.datetime.now(datetime.timezone.utc)
-    exp = now + datetime.timedelta(hours=settings.token_expire_hours)
+    exp = now + datetime.timedelta(hours=settings.auth.token_expire_hours)
     payload = {
         "sub": str(user_id),
         "is_guest": bool(is_guest),
         "iat": int(now.timestamp()),
         "exp": int(exp.timestamp()),
     }
-    return jwt.encode(payload, settings.secret_key, algorithm=ALGORITHM)
+    return jwt.encode(payload, settings.auth.secret_key, algorithm=ALGORITHM)
 
 
 def verify_token(token: str) -> int | None:
@@ -37,7 +37,7 @@ def verify_token(token: str) -> int | None:
     if not token:
         return None
     try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, settings.auth.secret_key, algorithms=[ALGORITHM])
         sub = payload.get("sub")
         if sub is None:
             return None

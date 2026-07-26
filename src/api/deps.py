@@ -21,7 +21,7 @@ def get_current_user(request: Request, response: Response, db=Depends(get_db)) -
             GUEST_COOKIE_NAME,
             user.device_id,
             httponly=True,
-            secure=settings.cookie_secure,
+            secure=settings.auth.cookie_secure,
             max_age=60 * 60 * 24 * 365,
             samesite="lax",
         )

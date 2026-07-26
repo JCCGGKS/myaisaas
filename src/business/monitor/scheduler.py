@@ -30,7 +30,7 @@ class MonitorScheduler:
             finally:
                 db.close()
             try:
-                await asyncio.wait_for(self._stop.wait(), timeout=settings.scan_interval_seconds)
+                await asyncio.wait_for(self._stop.wait(), timeout=settings.monitor.scan_interval_seconds)
             except asyncio.TimeoutError:
                 pass
 
@@ -39,7 +39,7 @@ class MonitorScheduler:
             return
         self._stop.clear()
         self._task = asyncio.create_task(self._loop())
-        logger.info("监控调度启动 interval=%ss", settings.scan_interval_seconds)
+        logger.info("监控调度启动 interval=%ss", settings.monitor.scan_interval_seconds)
 
     async def stop(self) -> None:
         self._stop.set()

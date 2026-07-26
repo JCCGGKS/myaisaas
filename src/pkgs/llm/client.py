@@ -26,10 +26,10 @@ SYSTEM_SCORE = (
 
 class LLMClient:
     def __init__(self, base_url: str | None = None, api_key: str | None = None, model: str | None = None, timeout: float | None = None):
-        self.base_url = (base_url or settings.llm_base_url).rstrip("/")
-        self.api_key = api_key if api_key is not None else settings.llm_api_key
-        self.model = model or settings.llm_model
-        self.timeout = timeout or settings.llm_timeout
+        self.base_url = (base_url or settings.llm.base_url).rstrip("/")
+        self.api_key = api_key if api_key is not None else settings.llm.api_key
+        self.model = model or settings.llm.model
+        self.timeout = timeout or settings.llm.timeout
 
     @property
     def available(self) -> bool:

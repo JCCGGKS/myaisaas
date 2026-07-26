@@ -4,7 +4,7 @@
 - 安全方法（GET/HEAD/OPTIONS）跳过；
 - 写方法：Origin 必须匹配「本站 Host 源」或 `csrf_trusted_origins` 之一，否则 403；
 - Origin 缺失视为可疑（合法同站 fetch/XHR 均带 Origin），拒绝写请求；
-- 配置由 settings 动态读取，便于测试关闭（`WA_CSRF_ENABLED=false`）。
+- 配置由 settings.csrf 动态读取，便于测试关闭（`WA_CSRF__ENABLED=false`）。
 """
 from config.settings import settings
 from utils.logging import get_logger
@@ -22,7 +22,7 @@ class CSRFOriginMiddleware:
         if scope["type"] != "http" or scope["method"] in _SAFE_METHODS:
             await self.app(scope, receive, send)
             return
-        if not settings.csrf_enabled:
+        if not settings.csrf.enabled:
             await self.app(scope, receive, send)
             return
 
@@ -36,7 +36,7 @@ class CSRFOriginMiddleware:
         host = headers.get("host", "")
         proto = headers.get("x-forwarded-proto") or scope.get("scheme") or "http"
         same_origin = f"{proto}://{host}"
-        trusted = set(settings.csrf_trusted_origins)
+        trusted = set(settings.csrf.trusted_origins)
         if origin == same_origin or origin in trusted:
             await self.app(scope, receive, send)
             return

@@ -1,6 +1,6 @@
 """CSRF Origin 校验测试：开启后，合法 Origin 放行、伪造/缺失 Origin 拒绝 403。
 
-其他用例因 conftest 设 WA_CSRF_ENABLED=false 跳过校验；本文件临时开启覆盖。
+其他用例因 conftest 关闭 csrf.enabled 跳过校验；本文件临时开启覆盖。
 """
 import pytest
 from fastapi.testclient import TestClient
@@ -12,9 +12,9 @@ from main import app
 @pytest.fixture
 def csrf_client(monkeypatch):
     # 临时开启 CSRF 并设定受信前端源
-    monkeypatch.setattr(settings, "csrf_enabled", True)
+    monkeypatch.setattr(settings.csrf, "enabled", True)
     monkeypatch.setattr(
-        settings, "csrf_trusted_origins", ["http://localhost:5173"]
+        settings.csrf, "trusted_origins", ["http://localhost:5173"]
     )
     return TestClient(app)
 

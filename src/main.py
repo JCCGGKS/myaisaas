@@ -17,17 +17,17 @@ logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("启动 %s …", settings.app_name)
+    logger.info("启动 %s …", settings.app.name)
     init_db()
-    if settings.monitor_autostart:
+    if settings.monitor.autostart:
         scheduler.start()
     yield
-    if settings.monitor_autostart:
+    if settings.monitor.autostart:
         await scheduler.stop()
-    logger.info("关闭 %s", settings.app_name)
+    logger.info("关闭 %s", settings.app.name)
 
 
-app = FastAPI(title=settings.app_name, lifespan=lifespan)
+app = FastAPI(title=settings.app.name, lifespan=lifespan)
 
 # 中间件顺序（最后注册 = 最外层）：CORS 最外层（保证 403 也带 CORS 头），
 # 其内为 CSRF Origin 校验，最内为请求日志。
@@ -35,7 +35,7 @@ app.middleware("http")(log_requests)
 app.add_middleware(CSRFOriginMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=settings.app.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

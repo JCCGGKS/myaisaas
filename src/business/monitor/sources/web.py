@@ -30,8 +30,8 @@ class WebSource(Source):
             return []
         try:
             async with httpx.AsyncClient(
-                timeout=settings.source_fetch_timeout,
-                headers={"User-Agent": settings.source_user_agent},
+                timeout=settings.source.fetch_timeout,
+                headers={"User-Agent": settings.source.user_agent},
                 follow_redirects=True,
             ) as client:
                 resp = await client.get(target)
@@ -50,4 +50,4 @@ class WebSource(Source):
             if not text:
                 continue
             items.append(RawItem(title=text[:200], url=url, content=text, source_id=self.source_id()))
-        return items[: settings.max_items_per_source]
+        return items[: settings.monitor.max_items_per_source]

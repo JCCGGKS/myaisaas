@@ -16,7 +16,7 @@ def _set_auth_cookie(response: Response, token: str) -> None:
         AUTH_COOKIE_NAME,
         token,
         httponly=True,
-        secure=settings.cookie_secure,
+        secure=settings.auth.cookie_secure,
         max_age=60 * 60 * 24 * 30,
         samesite="strict",
     )

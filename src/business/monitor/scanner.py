@@ -31,7 +31,7 @@ async def _process_items(db, radar, user, raw_items: list, llm=None) -> bool:
         if key in seen:
             continue
         relevance, summary = await score(it, radar, llm)
-        if relevance < settings.relevance_threshold:
+        if relevance < settings.monitor.relevance_threshold:
             logger.debug("低于阈值 radar=%s score=%.2f 丢弃: %s", radar.id, relevance, it.title)
             continue
         event = create_event(db, radar.id, key, it.title, it.url, relevance, summary)
@@ -53,7 +53,7 @@ async def scan_radar(db, radar, user, llm=None, sources: list | None = None) -> 
             except Exception as exc:
                 logger.error("源抓取异常 radar=%s src=%s: %s", radar.id, src.source_id(), exc)
                 fetched = []
-            raw_items.extend(fetched[: settings.max_items_per_source])
+            raw_items.extend(fetched[: settings.monitor.max_items_per_source])
 
         pushed_any = await _process_items(db, radar, user, raw_items, llm)
 

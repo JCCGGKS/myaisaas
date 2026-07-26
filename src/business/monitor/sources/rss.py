@@ -25,8 +25,8 @@ class RSSSource(Source):
     async def fetch(self, state: dict | None = None) -> list[RawItem]:
         try:
             async with httpx.AsyncClient(
-                timeout=settings.source_fetch_timeout,
-                headers={"User-Agent": settings.source_user_agent},
+                timeout=settings.source.fetch_timeout,
+                headers={"User-Agent": settings.source.user_agent},
                 follow_redirects=True,
             ) as client:
                 resp = await client.get(self.url)
@@ -62,4 +62,4 @@ class RSSSource(Source):
             content = re.sub(r"<[^>]+>", " ", desc)
             items.append(RawItem(title=title, url=link or None, content=content[:500], source_id=self.source_id()))
 
-        return items[: settings.max_items_per_source]
+        return items[: settings.monitor.max_items_per_source]

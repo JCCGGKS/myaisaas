@@ -34,7 +34,7 @@ class NotificationChannel(ABC):
 
 class TelegramChannel(NotificationChannel):
     def __init__(self, token: str | None = None):
-        self.token = token or settings.telegram_bot_token
+        self.token = token or settings.telegram.bot_token
 
     async def send(self, chat_id: str, msg: PushMessage) -> bool:
         if not chat_id:
@@ -60,13 +60,13 @@ class EmailChannel(NotificationChannel):
         use_ssl: bool | None = None,
         from_email: str | None = None,
     ):
-        self.host = smtp_host or settings.smtp_host
-        self.port = smtp_port or settings.smtp_port
-        self.user = smtp_user or settings.smtp_user
-        self.password = smtp_password or settings.smtp_password
-        self.use_tls = settings.smtp_use_tls if use_tls is None else use_tls
-        self.use_ssl = settings.smtp_use_ssl if use_ssl is None else use_ssl
-        self.from_email = from_email or settings.from_email
+        self.host = smtp_host or settings.email.smtp_host
+        self.port = smtp_port or settings.email.smtp_port
+        self.user = smtp_user or settings.email.smtp_user
+        self.password = smtp_password or settings.email.smtp_password
+        self.use_tls = settings.email.smtp_use_tls if use_tls is None else use_tls
+        self.use_ssl = settings.email.smtp_use_ssl if use_ssl is None else use_ssl
+        self.from_email = from_email or settings.email.from_email
 
     def _build_message(self, address: str, msg: PushMessage) -> MIMEMultipart:
         m = MIMEMultipart("alternative")

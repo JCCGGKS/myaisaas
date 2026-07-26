@@ -84,7 +84,7 @@ async def bind_channel(db: Session, user: User, channel_type: str, recipient: st
 
     # 游客限额：仅对新渠道生效（已绑定的重绑不计入）。优先于 not_implemented，
     # 这样已达限额的游客尝试任何新渠道都返回 limit_exceeded。
-    if user.is_guest and count_bound(db, user) >= settings.guest_channel_limit and not is_bound(db, user, ct):
+    if user.is_guest and count_bound(db, user) >= settings.guest.channel_limit and not is_bound(db, user, ct):
         raise LimitExceededError("游客最多绑定 1 个渠道，登录解锁多渠道")
 
     if ct in ("webpush", "feishu"):
@@ -114,7 +114,7 @@ async def verify_channel(db: Session, user: User, token: str) -> bool:
 
 
 async def _send_verification_email(address: str, token: str) -> None:
-    link = f"{settings.backend_base_url}/api/channels/verify?token={token}"
+    link = f"{settings.app.backend_base_url}/api/channels/verify?token={token}"
     msg = PushMessage(
         title="确认绑定 Watch Anything 邮箱",
         body=f"点击以下链接完成邮箱验证（30 分钟内有效）：\n{link}",

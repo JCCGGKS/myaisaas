@@ -11,7 +11,9 @@ from model.radar import Radar
 from model.user import User
 
 # 测试环境不自动启动监控调度，避免后台任务干扰用例
-settings.monitor_autostart = False
+settings.monitor.autostart = False
+# 默认关闭 CSRF（TestClient 不发 Origin 头）；CSRF 本身由 tests/test_csrf.py 单独开启覆盖
+settings.csrf.enabled = False
 
 
 @pytest.fixture(autouse=True)

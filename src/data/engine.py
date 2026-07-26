@@ -13,8 +13,8 @@ from utils.logging import get_logger
 logger = get_logger(__name__)
 
 # SQLite 单连接；PostgreSQL 用标准连接池
-_connect_args = {"check_same_thread": False} if settings.database_url.startswith("sqlite") else {}
-engine = create_engine(settings.database_url, future=True, connect_args=_connect_args)
+_connect_args = {"check_same_thread": False} if settings.database.url.startswith("sqlite") else {}
+engine = create_engine(settings.database.url, future=True, connect_args=_connect_args)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False, future=True)
 
 
@@ -29,7 +29,7 @@ def init_db() -> None:
 
     Base.metadata.create_all(bind=engine)
     _add_missing_columns()
-    logger.info("数据库表已初始化: %s", settings.database_url)
+    logger.info("数据库表已初始化: %s", settings.database.url)
 
 
 def _add_missing_columns() -> None:

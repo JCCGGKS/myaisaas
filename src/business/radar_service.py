@@ -22,7 +22,7 @@ async def create_radar(db: Session, user: User, raw_query: str, notify_channels:
     if not raw_query:
         raise AppError("监控目标不能为空", status_code=422, code="invalid_input")
 
-    if user.is_guest and count_by_owner(db, user.id) >= settings.guest_radar_limit:
+    if user.is_guest and count_by_owner(db, user.id) >= settings.guest.radar_limit:
         raise LimitExceededError("游客最多创建 1 个雷达，登录解锁更多")
 
     # LLM 解析自然语言 → 结构化参数（llm=None 时降级）
