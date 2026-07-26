@@ -86,7 +86,7 @@ class Settings(BaseSettings):
 
     # 数据源抓取：HTTP 超时与 UA
     source_fetch_timeout: float = 10.0
-    source_user_agent: str = "WatchAnything/0.1 (+https://...)"
+    source_user_agent: str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0"
 
     @classmethod
     def settings_customise_sources(

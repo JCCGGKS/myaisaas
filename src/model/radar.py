@@ -7,7 +7,7 @@
 - status：active / paused / error（业务开关 active 与 status 解耦）
 - last_scan_at / last_error：监控运行诊断
 """
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, func
 from sqlalchemy.types import JSON
 
 from model.base import Base
@@ -17,7 +17,8 @@ class Radar(Base):
     __tablename__ = "radars"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    owner_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
+    # 不使用外键约束；owner_id 仅作逻辑关联（自增主键 id 已存在）
+    owner_id = Column(Integer, index=True, nullable=False)
     raw_query = Column(Text, nullable=False)  # 用户原始自然语言
     # LLM 解析后的结构化参数
     keywords = Column(JSON, default=list, nullable=False)
