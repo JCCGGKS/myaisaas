@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted, nextTick, computed } from 'vue'
-import { listRadars, listEvents, createRadar, listChannels, bindChannel } from '../services/api.js'
+import { listRadars, listEvents, createRadar, listChannels, bindChannel, seedDemoEvents } from '../services/api.js'
 
 const radars = ref([])
 const eventsByRadar = ref({})
@@ -15,6 +15,10 @@ const creating = ref(false)
 const channels = ref([])
 const bindingType = ref('')
 const showBindModal = ref(false)
+// 真实后端绑定 email/webhook 需要 recipient；按渠道类型分别暂存
+const bindRecipients = ref({})
+// telegram 绑定后后端返回 connect_url，引导用户打开完成 bot 连接
+const telegramConnect = ref('')
 
 // 已绑定的渠道（同框内先绑后建）
 const boundChannel = computed(() => channels.value.find((c) => c.bound) || null)
@@ -74,14 +78,39 @@ function fillExample(ex) {
   newQuery.value = ex
 }
 
+// 灌入示例事件（演示）：触发真实 ingest 链路，事件过阈值后进入该雷达事件流
+const seeding = ref(false)
+async function seedDemo(r) {
+  if (seeding.value) return
+  seeding.value = true
+  try {
+    await seedDemoEvents(r.id, r.keywords)
+    await load()
+  } catch (e) {
+    error.value = e.message || '生成示例事件失败'
+  } finally {
+    seeding.value = false
+  }
+}
+
 async function bind(c) {
   if (c.bound || bindingType.value) return
   bindingType.value = c.type
   try {
-    const res = await bindChannel(c.type)
+    // telegram 无需 recipient；email/webhook 取对应输入
+    const recipient = c.type === 'telegram' ? '' : bindRecipients.value[c.type] || ''
+    const res = await bindChannel(c.type, recipient)
     const idx = channels.value.findIndex((x) => x.type === c.type)
     if (idx >= 0) channels.value[idx] = res
-    // 绑定后关闭弹窗并刷新（后端会回填雷达的 notify_channel）
+    if (c.type !== 'telegram') bindRecipients.value[c.type] = ''
+    // telegram 需打开 connect_url 完成连接：保留弹窗展示链接
+    if (c.type === 'telegram' && res.connect_url) {
+      telegramConnect.value = res.connect_url
+      await load()
+      return
+    }
+    telegramConnect.value = ''
+    // 绑定后关闭弹窗并刷新（后端会回填雷达的 notify_channels）
     showBindModal.value = false
     await load()
   } catch (e) {
@@ -102,9 +131,15 @@ const fmtTime = (iso) => {
   return d.toLocaleString()
 }
 
-// 雷达绑定的渠道列表：优先取 channels 数组（多通道），兼容旧的单值 notify_channel
+// 雷达绑定的渠道列表：兼容多来源字段（mock 的 channels / 真实后端的 notify_channels / 旧单值 notify_channel）
 const radarChannels = (r) =>
-  Array.isArray(r.channels) ? r.channels : r.notify_channel ? [r.notify_channel] : []
+  Array.isArray(r.channels)
+    ? r.channels
+    : Array.isArray(r.notify_channels)
+      ? r.notify_channels
+      : r.notify_channel
+        ? [r.notify_channel]
+        : []
 
 onMounted(load)
 </script>
@@ -143,7 +178,7 @@ onMounted(load)
                   :disabled="!!bindingType || c.bound"
                   @click="bind(c)"
                 >
-                  {{ bindingType === c.type ? '绑定中…' : '绑定' }}
+                  {{ bindingType === c.type ? '绑定中…' : (c.bound ? '已绑定' : '绑定') }}
                 </button>
               </div>
             </div>
@@ -204,8 +239,14 @@ onMounted(load)
           </div>
 
           <div class="radar__events">
+            <div class="radar__events-head">
+              <span class="radar__events-title mono">事件流</span>
+              <button class="radar__seed mono" type="button" :disabled="seeding" @click="seedDemo(r)">
+                {{ seeding ? '生成中…' : '🎲 演示事件' }}
+              </button>
+            </div>
             <p v-if="!eventsByRadar[r.id] || eventsByRadar[r.id].length === 0" class="radar__noev mono">
-              暂无命中事件 — 监测持续进行中。
+              暂无命中事件 — 监测持续进行中。点「🎲 演示事件」灌入示例。
             </p>
             <a
               v-for="ev in eventsByRadar[r.id]"
@@ -237,18 +278,30 @@ onMounted(load)
             <h3 class="modal__title">绑定推送渠道</h3>
             <p class="modal__sub">选择并绑定一个渠道，雷达命中的事件会主动通知你。</p>
             <div class="chans">
-              <div v-for="c in channels" :key="c.type" class="chan">
+              <div v-for="c in channels" :key="c.type" class="chan chan--col">
                 <span class="chan__type mono">{{ c.type }}</span>
+                <input
+                  v-if="c.type !== 'telegram'"
+                  v-model="bindRecipients[c.type]"
+                  class="chan__input"
+                  type="text"
+                  :placeholder="c.type === 'email' ? '你的邮箱地址' : 'Webhook URL'"
+                  :disabled="!!bindingType || c.bound"
+                />
                 <button
                   class="chan__btn"
                   type="button"
                   :disabled="!!bindingType || c.bound"
                   @click="bind(c)"
                 >
-                  {{ bindingType === c.type ? '绑定中…' : '绑定' }}
+                  {{ bindingType === c.type ? '绑定中…' : (c.bound ? '已绑定' : '绑定') }}
                 </button>
               </div>
             </div>
+            <p v-if="telegramConnect" class="bind__connect mono">
+              请打开链接完成 Telegram 连接：
+              <a :href="telegramConnect" target="_blank" rel="noopener">{{ telegramConnect }}</a>
+            </p>
           </div>
         </div>
       </transition>
@@ -421,6 +474,26 @@ onMounted(load)
 }
 .chan__btn:hover:not(:disabled) { background: rgba(184, 255, 60, 0.1); }
 .chan__btn:disabled { opacity: 0.5; cursor: default; }
+.chan--col { flex-direction: column; align-items: stretch; gap: 8px; }
+.chan__input {
+  background: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 12px;
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 13px;
+}
+.chan__input::placeholder { color: var(--muted-2); }
+.chan__input:focus { outline: none; border-color: var(--lime); }
+.bind__connect {
+  margin-top: 16px;
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.6;
+  word-break: break-all;
+}
+.bind__connect a { color: var(--lime); }
 
 /* ---------- 雷达列表（创建后出现） ---------- */
 .radars {
@@ -539,6 +612,33 @@ onMounted(load)
 .fade-leave-to { opacity: 0; }
 
 .radar__events { display: flex; flex-direction: column; gap: 10px; }
+.radar__events-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.radar__events-title {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+}
+.radar__seed {
+  font-size: 11px;
+  color: var(--cyan);
+  background: none;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  padding: 5px 11px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+.radar__seed:hover:not(:disabled) {
+  background: rgba(80, 220, 240, 0.1);
+  border-color: var(--cyan);
+}
+.radar__seed:disabled { opacity: 0.5; cursor: default; }
 .radar__noev { color: var(--muted-2); font-size: 13px; }
 .event {
   display: flex;
