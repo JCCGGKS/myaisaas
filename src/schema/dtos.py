@@ -69,4 +69,3 @@ class AuthMeOut(BaseModel):
     email: str | None
     name: str | None
     is_guest: bool
-    channel_bindings: list

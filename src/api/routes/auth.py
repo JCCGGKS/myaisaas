@@ -54,7 +54,6 @@ async def me(user: User = Depends(get_current_user)):
         email=user.email,
         name=user.name,
         is_guest=user.is_guest,
-        channel_bindings=user.channel_bindings or [],
     )
 
 

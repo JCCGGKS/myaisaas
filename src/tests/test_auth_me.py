@@ -9,7 +9,7 @@ def test_me_as_guest(client: TestClient):
     body = r.json()
     assert body["is_guest"] is True
     assert body["email"] is None
-    assert isinstance(body["channel_bindings"], list)
+    assert "channel_bindings" not in body
 
 
 def test_me_after_register(client: TestClient):

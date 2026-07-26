@@ -213,7 +213,7 @@ export async function login(email, password) {
 // 当前用户状态：游客（is_guest=true，无 email）或已登录账号（is_guest=false）
 export async function getMe() {
   if (USE_MOCK) {
-    return { user_id: 'mock', email: null, is_guest: true, channel_bindings: [] }
+    return { user_id: 'mock', email: null, is_guest: true }
   }
   return request('/auth/me')
 }
