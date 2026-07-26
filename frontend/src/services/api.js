@@ -210,13 +210,13 @@ export async function seedDemoEvents(radarId, keywords = []) {
 // ---------- 鉴权（JWT，cookie 自动携带/写入） ----------
 // 说明：注册/登录本质是把「当前游客」升级为账号，后端会把游客的雷达与渠道
 // 合并进账号并写入 wa_uid（JWT）cookie。前端无需手动管理 token，依赖 cookie 即可。
-export async function register(email, password) {
+export async function register(name, email, password) {
   if (USE_MOCK) {
     return { user_id: 'mock', is_guest: false }
   }
   return request('/auth/register', {
     method: 'POST',
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ name: name || '', email, password }),
   })
 }
 

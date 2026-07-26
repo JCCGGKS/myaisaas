@@ -180,7 +180,7 @@ onMounted(load)
               <router-link to="/signin" class="who__link">登录 / 注册解锁更多 →</router-link>
             </template>
             <template v-else>
-              <span class="who__email mono">{{ me.email }}</span>
+              <span class="who__email mono">{{ me.name || me.email }}</span>
               <button class="who__logout mono" type="button" :disabled="loggingOut" @click="doLogout">
                 {{ loggingOut ? '退出中…' : '退出' }}
               </button>

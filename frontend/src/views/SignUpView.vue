@@ -21,7 +21,7 @@ async function submit() {
   }
   submitting.value = true
   try {
-    await register(email.value, password.value)
+    await register(name.value, email.value, password.value)
     // 后端已把当前游客合并进账号并写入 JWT cookie，直接进 dashboard
     router.push('/dashboard')
   } catch (e) {
