@@ -219,3 +219,7 @@ __marimo__/
 
 template 
 frontend/node_modules
+
+# Local SQLite database (generated at runtime, never commit)
+*.db
+*.db-journal
