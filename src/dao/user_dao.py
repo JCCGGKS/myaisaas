@@ -1,5 +1,6 @@
 """User 数据访问：按 device_id 取/建游客；按 id 取登录用户。"""
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from data.engine import Session
 from model.user import User
@@ -30,8 +31,21 @@ def create_guest(db: Session, device_id: str) -> User:
 
 
 def upsert_guest(db: Session, device_id: str) -> User:
-    """无则建、有则取。返回游客用户（is_guest=True）。"""
+    """无则建、有则取。返回游客用户（is_guest=True）。
+
+    注意：首次访问的游客常伴随多个并行请求（/api/radars、/api/auth/me 等同框触发），
+    若用「先查后插」在并发下会竞态：都查到 None 后都 INSERT，后者撞 UNIQUE(device_id)。
+    故插入冲突时回退为「按 device_id 重新读取」，由先成功的那个请求落库，保证幂等。
+    """
     user = get_by_device_id(db, device_id)
-    if user is None:
-        user = create_guest(db, device_id)
-    return user
+    if user is not None:
+        return user
+    try:
+        return create_guest(db, device_id)
+    except IntegrityError:
+        db.rollback()
+        logger.warning("游客创建竞态命中（device_id 已存在），回退读取 device_id=%s", device_id)
+        user = get_by_device_id(db, device_id)
+        if user is None:
+            raise
+        return user

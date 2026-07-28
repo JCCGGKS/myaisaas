@@ -122,3 +122,45 @@ def test_bind_writes_to_radar_not_user(client: TestClient):
     radars = client.get("/api/radars").json()
     nc = radars[0]["notify_channels"]
     assert any(isinstance(b, dict) and b.get("channel_type") == "email" for b in nc)
+
+
+def test_concurrent_guest_upsert_no_duplicate():
+    """回归：首访游客同框触发多个并行请求，upsert_guest 必须幂等，
+    不能因 UNIQUE(device_id) 竞态抛出 IntegrityError，且只落库一个游客。"""
+    import threading
+
+    from data.engine import SessionLocal
+    from dao.user_dao import get_by_device_id, upsert_guest
+    from model.user import User
+    from sqlalchemy import func, select
+
+    device_id = "concurrent_guest_device"
+    assert get_by_device_id(SessionLocal(), device_id) is None
+
+    errors = []
+
+    def worker():
+        try:
+            db = SessionLocal()
+            try:
+                upsert_guest(db, device_id)
+            finally:
+                db.close()
+        except Exception as e:  # noqa: BLE001
+            errors.append(repr(e))
+
+    threads = [threading.Thread(target=worker) for _ in range(6)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert not errors, f"并发 upsert 抛错：{errors}"
+
+    db = SessionLocal()
+    try:
+        assert get_by_device_id(db, device_id) is not None
+        cnt = db.scalar(select(func.count(User.id)).where(User.device_id == device_id))
+        assert cnt == 1, f"不应创建多个游客，实际 {cnt} 个"
+    finally:
+        db.close()
