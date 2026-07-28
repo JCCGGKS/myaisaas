@@ -15,9 +15,11 @@ sys.path.insert(0, str(ROOT))
 os.environ["APP_ENV"] = "test"
 
 _TMP = tempfile.mkdtemp(prefix="wa_test_")
-os.environ["WA_DATABASE_URL"] = f"sqlite:///{_TMP}/watch_anything_test.db"
+# 注意：database.url 是嵌套字段，按 env_nested_delimiter="__" 必须写成 WA_DATABASE__URL（双下划线），
+# 否则覆盖不生效，会回退到默认 src/watch_anything.db，导致跨运行共享陈旧 schema。
+os.environ["WA_DATABASE__URL"] = f"sqlite:///{_TMP}/watch_anything_test.db"
 # 测试环境关闭网络依赖，渠道发送走 mock / Fake
-os.environ["WA_TELEGRAM_BOT_TOKEN"] = ""
+os.environ["WA_TELEGRAM__BOT_TOKEN"] = ""
 os.environ["WA_SMTP_HOST"] = ""
 # 测试保持「需验证」语义（不自动验证），验证流程由 test_channel_bind 覆盖
 os.environ["WA_EMAIL__AUTO_VERIFY"] = "false"
