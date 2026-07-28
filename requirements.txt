@@ -7,6 +7,8 @@ httpx
 pyyaml
 PyJWT
 bcrypt
+# Web Push（浏览器原生推送）：pywebpush 发送，依赖 cryptography / http-ece 自动安装
+pywebpush
 # 生产用 PostgreSQL + 向量检索（开发默认 SQLite，零配置）
 # psycopg[binary]
 # pgvector

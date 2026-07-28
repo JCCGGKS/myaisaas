@@ -58,6 +58,17 @@ feishu:
   sign_secret: ""
   timeout: 10.0
 
+webpush:
+  # Web Push（浏览器原生通知）VAPID 密钥对（EC P-256）。
+  # 务必用环境变量覆盖（不要把私钥写进仓库）：
+  #   WA_WEBPUSH__VAPID_PUBLIC_KEY=<public>
+  #   WA_WEBPUSH__VAPID_PRIVATE_KEY=<private>
+  #   WA_WEBPUSH__SUBJECT=mailto:ops@your-domain.example.com
+  vapid_public_key: ""
+  vapid_private_key: ""
+  subject: "mailto:noreply@watch-anything.example.com"
+  timeout: 10.0
+
 llm:
   base_url: "https://api.openai.com/v1"
   # 用 WA_LLM__API_KEY 覆盖

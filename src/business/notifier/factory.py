@@ -5,6 +5,7 @@ from business.notifier.channels import (
     NotificationChannel,
     TelegramChannel,
     WebhookChannel,
+    WebpushChannel,
 )
 from utils.logging import get_logger
 
@@ -17,6 +18,7 @@ class ChannelFactory:
         "email": EmailChannel,
         "webhook": WebhookChannel,
         "feishu": FeishuChannel,
+        "webpush": WebpushChannel,
     }
 
     @classmethod

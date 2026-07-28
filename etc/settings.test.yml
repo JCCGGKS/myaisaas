@@ -54,6 +54,13 @@ feishu:
   sign_secret: ""
   timeout: 10.0
 
+webpush:
+  # 测试不真发：留空走 mock（WebpushChannel.send 降级返回 True）
+  vapid_public_key: ""
+  vapid_private_key: ""
+  subject: "mailto:noreply@watch-anything.local"
+  timeout: 10.0
+
 llm:
   # 测试环境不调用外部 LLM，留空降级
   base_url: "https://api.openai.com/v1"

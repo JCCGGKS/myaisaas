@@ -66,6 +66,17 @@ feishu:
   sign_secret: ""
   timeout: 10.0
 
+webpush:
+  # Web Push（浏览器原生通知）VAPID 密钥对（EC P-256）。
+  # 留空则 WebpushChannel 发送降级为 mock（不真发，便于无密钥跑通流程）。
+  # 生成：pip install vapid 后 `vapid --applicationServerKey --privateKey`
+  #   vapid_public_key：下发前端用于 pushManager.subscribe 的 applicationServerKey
+  #   vapid_private_key：仅服务端持有，pywebpush 发送时签名用
+  vapid_public_key: ""
+  vapid_private_key: ""
+  subject: "mailto:noreply@watch-anything.local"
+  timeout: 10.0
+
 llm:
   # api_key 留空则自然语言解析/相关性打分自动降级（不调用外部）
   base_url: "https://api.openai.com/v1"

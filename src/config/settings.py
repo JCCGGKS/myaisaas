@@ -112,6 +112,21 @@ class FeishuSettings(BaseModel):
     timeout: float = 10.0
 
 
+class WebpushSettings(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    # Web Push（浏览器原生通知）所需的 VAPID 密钥对（EC P-256）。
+    # vapid_public_key：下发前端用于 pushManager.subscribe 的 applicationServerKey。
+    # vapid_private_key：仅服务端持有，pywebpush 发送时用其签名。
+    # 留空则 WebpushChannel.send 降级为 mock（不真发，便于无密钥跑通流程）。
+    # 生成：pip install vapid 后 `vapid --applicationServerKey --privateKey`。
+    vapid_public_key: str = ""
+    vapid_private_key: str = ""
+    # VAPID 声明的 sub（通常是 mailto: 联系邮箱），部分推送服务用于问责。
+    subject: str = "mailto:noreply@watch-anything.local"
+    # 单次推送请求超时（秒）
+    timeout: float = 10.0
+
+
 class LlmSettings(BaseModel):
     model_config = ConfigDict(extra="ignore")
     # LLM：OpenAI 兼容接口（可切 Claude / 国产模型）
@@ -195,6 +210,7 @@ class Settings(BaseSettings):
     email: EmailSettings = EmailSettings()
     telegram: TelegramSettings = TelegramSettings()
     feishu: FeishuSettings = FeishuSettings()
+    webpush: WebpushSettings = WebpushSettings()
     llm: LlmSettings = LlmSettings()
     monitor: MonitorSettings = MonitorSettings()
     source: SourceSettings = SourceSettings()

@@ -162,6 +162,7 @@ class ChannelFactory:
         "email": EmailChannel,
         "feishu": FeishuChannel,
         "webhook": WebhookChannel,
+        "webpush": WebpushChannel,
     }
 
     @classmethod

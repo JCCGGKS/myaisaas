@@ -8,6 +8,7 @@ import asyncio
 import base64
 import hashlib
 import hmac
+import json
 import smtplib
 import time
 from dataclasses import dataclass
@@ -18,6 +19,7 @@ from email.mime.text import MIMEText
 from email.utils import formataddr
 
 from abc import ABC, abstractmethod
+from pywebpush import WebPushException, webpush
 
 from config.settings import settings
 from utils.logging import get_logger
@@ -223,6 +225,63 @@ class WebhookChannel(NotificationChannel):
         logger.info("[mock] Webhook -> %s : %s", url, msg.title)
         # TODO: 真实 POST JSON 到 url
         return True
+
+
+class WebpushChannel(NotificationChannel):
+    """浏览器原生 Web Push：recipient 为 PushSubscription 的 JSON 字符串。
+
+    用 VAPID 私钥经 pywebpush 推送到浏览器 endpoint。
+    未配置 VAPID 私钥时降级为 mock（不真发，便于无密钥跑通流程）。
+    """
+
+    def __init__(
+        self,
+        vapid_private_key: str | None = None,
+        subject: str | None = None,
+        timeout: float | None = None,
+    ):
+        self.vapid_private_key = vapid_private_key or settings.webpush.vapid_private_key
+        self.subject = subject or settings.webpush.subject
+        self.timeout = settings.webpush.timeout if timeout is None else timeout
+
+    async def send(self, subscription_json: str, msg: PushMessage) -> bool:
+        if not subscription_json:
+            logger.warning("WebPush 发送跳过：subscription 为空")
+            return False
+        # 开发降级：未配置 VAPID 私钥不真发，流程不中断
+        if not self.vapid_private_key:
+            logger.info("[mock] WebPush -> %s : %s", subscription_json[:40], msg.title)
+            return True
+        try:
+            sub = json.loads(subscription_json)
+        except Exception:
+            logger.error("WebPush 发送失败：subscription 非合法 JSON")
+            return False
+        payload = json.dumps(
+            {"title": msg.title, "body": msg.body, "url": msg.url or ""}
+        ).encode("utf-8")
+        endpoint = (sub.get("endpoint") or "")[:60]
+        try:
+            await asyncio.to_thread(
+                webpush,
+                subscription_info=sub,
+                data=payload,
+                vapid_private_key=self.vapid_private_key,
+                vapid_claims={"sub": self.subject},
+                timeout=self.timeout,
+            )
+            logger.info("WebPush 发送成功 endpoint=%s title=%s", endpoint, msg.title)
+            return True
+        except WebPushException as exc:
+            # 404/410：订阅已失效（退订/轮换），调用方可据此移除
+            if exc.response is not None and exc.response.status_code in (404, 410):
+                logger.warning("WebPush 订阅失效(endpoint gone) endpoint=%s", endpoint)
+                return False
+            logger.error("WebPush 发送失败 endpoint=%s : %s", endpoint, exc)
+            return False
+        except Exception as exc:  # 外部依赖失败不应中断主流程
+            logger.error("WebPush 发送失败 endpoint=%s : %s", endpoint, exc)
+            return False
 
 
 class FakeChannel(NotificationChannel):

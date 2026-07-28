@@ -2,7 +2,7 @@
 
 > Watch Anything 的**渠道接入（绑定）与消息推送**设计方案。
 > 最终渠道组合（已确认）：**`email` + `Web Push` + `飞书`**。`qq` 归并进 `email`，`微信` 降级为未来可选。
-> 本期只做设计，不落地实现。
+> 设计已落地：`email` / `feishu` / `webpush` 渠道均已实现（绑定跟随雷达，不写 User）。
 
 ---
 
@@ -32,6 +32,12 @@
 - **对游客零门槛**：订阅发生在页面内用户手势中，天然证明归属，无需绑定第三方账号。
 - 机制：前端 `pushManager.subscribe({userVisibleOnly:true, applicationServerKey: VAPID_PUBLIC})` → 得到 `PushSubscription`（endpoint + 密钥）→ 提交后端存储；后端用 VAPID 私钥经 `pywebpush` 推送到 endpoint。
 - 代价：需前端 Service Worker + 一对 VAPID 密钥；不同浏览器授权策略不一。
+- **安全上下文约束（重要）**：Web Push 依赖的 `Service Worker` / `Notification` / `PushManager` 三个 API 只在「安全上下文」下可用——即 `https://`，或 `http://localhost`（含 `127.0.0.1`）。若通过局域网 IP（如 `http://192.168.x.x:5173`）以普通 http 访问，这些 API 为 `undefined`，订阅按钮会被禁用/报错。**本地开发用 `localhost` 即可；生产或跨设备访问必须 HTTPS**（dev 也可给 Vite 配自签证书走 https）。
+- **订阅 JSON（PushSubscription）结构**：前端 `JSON.stringify(subscription)` 后作为 `recipient` 提交。字段含义：
+  - `endpoint`：推送投递地址，属于**浏览器厂商的推送服务**（Chrome→FCM、Firefox→Mozilla Push Service），服务端经 `pywebpush` 把消息 POST 到这里，再由厂商转发到设备。
+  - `keys.p256dh`：设备公钥，服务端用它**加密**推送载荷，只有该设备能解密（端到端加密，推送服务商也看不到明文）。
+  - `keys.auth`：防重放/认证密钥。
+  - 简言之：订阅 JSON = 这台浏览器专属的「加密收件地址」，是后端能精准推送到的凭据。
 
 ### 2.3 feishu（飞书，MVP = 群机器人 Webhook）
 - 用户在飞书群添加「自定义机器人」得到 webhook URL，粘贴到绑定表单 → 我们 POST 消息卡片即达群。
@@ -40,9 +46,11 @@
 
 ---
 
-## 3. 数据模型调整
+## 3. 数据模型（绑定跟随雷达）
 
-`User.channel_bindings`（JSONB）每条结构：
+> 绑定已**跟随雷达**，不再写 `User`。每个雷达在 `Radar.notify_channels`（JSON 列表）里各自保存绑定，互不继承。
+
+`Radar.notify_channels` 为 `list[dict]`，单条结构：
 
 ```json
 {
@@ -51,14 +59,13 @@
   "verified": true,
   "bind_token": "email 验证用，一次性（webpush/feishu 无）",
   "bind_token_expire_at": "ISO | null",
-  "verified_at": "ISO | null",
-  "extra": "可选：feishu 是否为 DM 模式等"
+  "verified_at": "ISO | null"
 }
 ```
 
 - 渠道枚举：`["email", "webpush", "feishu"]`，替换原 `["telegram","email","webhook"]`。
-- `Radar.notify_channels`（多通道列表）结构不变，值改新枚举。
 - `webpush` 的 `recipient` 实为序列化后的 `PushSubscription`（endpoint+auth/key），发送时反序列化。
+- 游客限额按「单个雷达的绑定数」计（见 `settings.guest.channel_limit`）；已绑定的重绑不计入新额度。
 
 ---
 
@@ -79,11 +86,14 @@ GET /api/channels/verify?token=xxx
 
 ### 4.2 webpush
 ```
-前端：请求通知权限 → pushManager.subscribe(VAPID_PUBLIC) → 得到 subscription
-POST /api/channels/webpush/bind  { subscription: {...} }
+前端：请求通知权限 → 注册 /sw.js → pushManager.subscribe(VAPID_PUBLIC) → 得到 PushSubscription
+POST /api/channels/webpush/bind  { recipient: "<PushSubscription 的 JSON 字符串>", radar_id: <id> }
+  → 后端校验 JSON 含 endpoint / keys(p256dh,auth)
   → 订阅来自页面内用户手势，视为所有权证明 → verified=true 立即
-  → 存储序列化 subscription 到 channel_bindings
+  → 存储序列化 subscription 到该雷达的 notify_channels（绑定跟随雷达，不写 User）
+前端订阅所需的 VAPID 公钥来自 GET /api/channels/vapid-public-key（后端 etc/settings.webpush 单一来源）
 ```
+- 复用 `ChannelBind.recipient: str` 承载订阅 JSON，与 feishu/email 绑定路径统一，不改 schema。
 - 重复 bind：更新 subscription（浏览器可能轮换 endpoint）。
 - 游客同样可用（无需第三方账号）。
 
@@ -146,16 +156,20 @@ POST /api/channels/feishu/bind  { recipient: "webhook url" }
 ### 已拍板（2026-07-26）
 - [x] **邮件发送选型（现阶段）= 本地 SMTP**：开发用 MailHog/Mailpit（localhost:1025，零成本零配置）。`EmailChannel` 底层抽象为可切换的 `EmailBackend`，后续无缝演进：个人 SMTP → 云厂 SMTP 中继 → 云厂 HTTP API。
 - [x] **现阶段只落地 `email` 渠道**（本地 SMTP 真发 + 绑定验证 + 去重 + 重试）；`webpush` / `feishu` 留作后续扩展（本期绑定返回未实现）。
+- [x] **`feishu` 渠道已落地**：群机器人 Webhook 绑定即 verified，发送消息卡片（2026-07-28）。
+- [x] **`webpush` 渠道已落地**：浏览器原生推送，订阅 JSON 经 `recipient` 绑定，VAPID 由 `WebpushSettings` + `pywebpush` 驱动（2026-07-28）。详见 `reports/2026-07-28_*.md`。
 
 ### 待确认（未来）
 - [ ] 飞书是否仅做群机器人 Webhook（MVP），还是同期做应用消息 DM（需飞书自建应用 + OAuth）。
-- [ ] VAPID 密钥如何生成与存储（环境变量 / KMS）（待 webpush 落地时定）。
+- [x] VAPID 密钥生成与存储：`cryptography` 生成 EC P-256 密钥对，本地存 `etc/settings.local.yml` 的 `webpush.vapid_public/private_key`，生产用 `WA_WEBPUSH__VAPID_PUBLIC_KEY` / `WA_WEBPUSH__VAPID_PRIVATE_KEY` 环境变量注入（私钥不入库）。
 - [ ] 生产切云厂邮件推送（阿里云/腾讯云）时的实名 + 发信域名(DKIM/SPF)配置。
 
 ### 本期设计交付
 - [x] `docs/02_channels.md`（本文件，已按 email+webpush+feishu 定稿）
 - [x] **email 渠道落地完成**：本地 SMTP 真发（MailHog 兼容）、绑定验证（一次性令牌 + 验证邮件）、`notify_radar` 去重前置校验、`dispatch` 指数退避重试。详见 `reports/2026-07-26_1700_渠道接入推送email落地.md`。
-- [ ] `webpush` / `feishu`：尚未实现（绑定返回 501），留作后续扩展。
+- [x] `webpush`：已实现（绑定 + 发送 + 410 失效处理），本地无 VAPID 密钥时降级为 mock。
+- [x] `feishu`：已实现（群机器人 Webhook）。
+- [ ] （未来）订阅失效（410）自动清理 bindings 的定时任务。
 
 ### 未来可选
 - [ ] 微信（企业微信中转 / 微信客服，48h 窗口）

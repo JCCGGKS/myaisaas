@@ -5,10 +5,17 @@ from fastapi import APIRouter, Body, Depends, Query
 
 from api.deps import get_current_user, get_db
 from business.channel_service import bind_channel, list_channels, verify_channel
+from config.settings import settings
 from model.user import User
 from schema.dtos import ChannelBind, ChannelOut
 
 router = APIRouter(prefix="/api/channels", tags=["channels"])
+
+
+@router.get("/vapid-public-key")
+async def vapid_public_key():
+    """下发 VAPID 公钥，供前端 pushManager.subscribe 的 applicationServerKey。"""
+    return {"vapid_public_key": settings.webpush.vapid_public_key}
 
 
 @router.get("", response_model=list[ChannelOut])

@@ -123,7 +123,30 @@ async def bind_channel(
         raise LimitExceededError("游客每个雷达最多绑定 1 个渠道，登录解锁多渠道")
 
     if ct == "webpush":
-        raise AppError(f"渠道 {ct} 尚未实现（后续扩展）", status_code=501, code="not_implemented")
+        sub = (recipient or "").strip()
+        if not sub:
+            raise AppError("webpush 需要浏览器订阅信息(subscription)", status_code=422, code="invalid_input")
+        try:
+            obj = json.loads(sub)
+        except Exception:
+            raise AppError("webpush subscription 需为合法 JSON", status_code=422, code="invalid_input")
+        if (
+            not isinstance(obj, dict)
+            or not obj.get("endpoint")
+            or not isinstance(obj.get("keys"), dict)
+            or not obj["keys"].get("p256dh")
+            or not obj["keys"].get("auth")
+        ):
+            raise AppError(
+                "webpush subscription 缺少 endpoint / keys(p256dh, auth)",
+                status_code=422,
+                code="invalid_input",
+            )
+        # 订阅来自页面内用户手势，视为所有权证明，立即 verified
+        binding = {"channel_type": "webpush", "recipient": sub, "verified": True}
+        set_radar_binding(db, radar_id, binding)
+        logger.info("webpush 绑定成功 radar_id=%s user_id=%s", radar_id, user.id)
+        return {"type": "webpush", "bound": True, "verified": True}
 
     # ---- feishu 绑定：群机器人 webhook 即凭证，绑定即 verified（无需邮件验证） ----
     if ct == "feishu":
