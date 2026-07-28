@@ -145,6 +145,11 @@ class TelegramChannel(NotificationChannel):
 class EmailChannel(NotificationChannel):
     async def send(self, address: str, msg: PushMessage) -> bool: ...
 
+class FeishuChannel(NotificationChannel):
+    # 飞书群机器人：recipient=webhook URL，构造 interactive 卡片 POST；
+    # 机器人开启签名校验时由 settings.feishu.sign_secret 提供密钥。
+    async def send(self, webhook_url: str, msg: PushMessage) -> bool: ...
+
 class WebhookChannel(NotificationChannel):
     async def send(self, url: str, msg: PushMessage) -> bool: ...
 ```
@@ -155,6 +160,7 @@ class ChannelFactory:
     _registry = {
         "telegram": TelegramChannel,
         "email": EmailChannel,
+        "feishu": FeishuChannel,
         "webhook": WebhookChannel,
     }
 

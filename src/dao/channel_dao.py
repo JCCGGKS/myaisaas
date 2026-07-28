@@ -2,7 +2,8 @@
 
 每条绑定：{channel_type, recipient, verified, bind_token?, bind_token_expire_at?, verified_at?}
 - email：bind 时先建占位（verified=False, 带一次性 bind_token），验证邮件点链接后才 verified=True
-- webpush/feishu：本期未实现（见 channel_service）
+- feishu：绑定即 verified（webhook 本身即凭证，无邮件验证环节）
+- webpush：本期未实现（见 channel_service，返回 501）
 """
 import time
 

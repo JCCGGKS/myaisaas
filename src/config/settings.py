@@ -102,6 +102,16 @@ class TelegramSettings(BaseModel):
     bot_username: str = ""
 
 
+class FeishuSettings(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    # 飞书（Lark）群机器人：webhook 由用户在绑定时提供（recipient=webhook URL）。
+    # 若机器人开启「签名校验」，需在此填入对应机器人的 sign_secret（与 webhook 同属一个机器人）。
+    # 留空则不签名（适用于未开启签名校验的群机器人）。
+    sign_secret: str = ""
+    # 单次请求超时（秒）
+    timeout: float = 10.0
+
+
 class LlmSettings(BaseModel):
     model_config = ConfigDict(extra="ignore")
     # LLM：OpenAI 兼容接口（可切 Claude / 国产模型）
@@ -184,6 +194,7 @@ class Settings(BaseSettings):
     auth: AuthSettings = AuthSettings()
     email: EmailSettings = EmailSettings()
     telegram: TelegramSettings = TelegramSettings()
+    feishu: FeishuSettings = FeishuSettings()
     llm: LlmSettings = LlmSettings()
     monitor: MonitorSettings = MonitorSettings()
     source: SourceSettings = SourceSettings()

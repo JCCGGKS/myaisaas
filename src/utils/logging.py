@@ -9,6 +9,7 @@
 - dir：日志文件根目录（相对路径基于仓库根，如 logs），写入 <dir>/watch_anything.log。
 """
 import logging
+import logging.handlers
 import os
 import sys
 from pathlib import Path

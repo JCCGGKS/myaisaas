@@ -36,32 +36,47 @@ def test_guest_radar_limit(client: TestClient):
 
 
 def test_guest_channel_limit(client: TestClient):
-    # 渠道列表：email / webpush / feishu 三类，初始均未绑定
-    r = client.get("/api/channels")
+    # 绑定跟随雷达：先建雷达（渠道限额按「单个雷达」计）
+    r = client.post("/api/radars", json={"raw_query": "雷达 A"})
+    assert r.status_code == 201
+    radar_id = r.json()["id"]
+
+    # 渠道列表：email / webpush / feishu 三类，该雷达初始均未绑定
+    r = client.get("/api/channels", params={"radar_id": radar_id})
     assert r.status_code == 200
     bodies = {c["type"]: c for c in r.json()}
     assert set(bodies) == {"email", "webpush", "feishu"}
     assert all(not c["bound"] for c in bodies.values())
 
     # 绑定 email → 返回 bound=True、verified=False（待验证邮件）
-    r = client.post("/api/channels/email/bind", json={"recipient": "me@example.com"})
+    r = client.post(
+        "/api/channels/email/bind",
+        json={"recipient": "me@example.com", "radar_id": radar_id},
+    )
     assert r.status_code == 200
     body = r.json()
     assert body["bound"] is True
     assert body["verified"] is False
 
-    # 绑定第二个不同渠道 webpush → 触发游客限额 402
-    r = client.post("/api/channels/webpush/bind")
+    # 同一雷达绑定第二个渠道 → 触发游客「每雷达」限额 402
+    r = client.post(
+        "/api/channels/feishu/bind",
+        json={"recipient": "https://open.feishu.cn/open-apis/bot/v2/hook/abc", "radar_id": radar_id},
+    )
     assert r.status_code == 402
     assert r.json()["code"] == "limit_exceeded"
 
 
 def test_register_lifts_guest_limit(client: TestClient):
-    # 先占满游客限额：1 雷达 + 1 渠道
+    # 先占满游客限额：1 雷达 + 在该雷达上绑 1 渠道
     client.post("/api/radars", json={"raw_query": "雷达 A"})
-    client.post("/api/channels/email/bind", json={"recipient": "me@example.com"})
+    radar_id = client.get("/api/radars").json()[0]["id"]
+    client.post(
+        "/api/channels/email/bind",
+        json={"recipient": "me@example.com", "radar_id": radar_id},
+    )
 
-    # 超限确认
+    # 超限确认（第二个雷达）
     assert client.post("/api/radars", json={"raw_query": "雷达 B"}).status_code == 402
 
     # 注册 → 升级为真实账号，解除限额
@@ -70,11 +85,15 @@ def test_register_lifts_guest_limit(client: TestClient):
     assert r.json()["is_guest"] is False
     assert "wa_auth" in client.cookies  # 写入 token cookie
 
-    # 限额解除：可继续建雷达；重新绑 email（重发验证）不再被限额拦截
+    # 限额解除：可继续建雷达；在新雷达上重新绑 email 不再被限额拦截
     r = client.post("/api/radars", json={"raw_query": "雷达 B"})
     assert r.status_code == 201
+    new_radar_id = r.json()["id"]
 
-    r = client.post("/api/channels/email/bind", json={"recipient": "me@example.com"})
+    r = client.post(
+        "/api/channels/email/bind",
+        json={"recipient": "me@example.com", "radar_id": new_radar_id},
+    )
     assert r.status_code == 200
     assert r.json()["bound"] is True
 
@@ -90,11 +109,16 @@ def test_create_radar_empty_query_rejected(client: TestClient):
     assert r.status_code in (400, 422)
 
 
-def test_bind_backfills_radar_channel(client: TestClient):
-    # 先建雷达（未绑渠道，notify_channels 初始为空）
+def test_bind_writes_to_radar_not_user(client: TestClient):
+    # 新建雷达（未绑渠道，notify_channels 初始为空 list[dict]）
     client.post("/api/radars", json={"raw_query": "雷达 A"})
-    # 绑定 email 后，雷达的 notify_channels 应追加该渠道
-    r = client.post("/api/channels/email/bind", json={"recipient": "me@example.com"})
+    radar_id = client.get("/api/radars").json()[0]["id"]
+    # 绑定 email 后，雷达的 notify_channels 应含该渠道（list[dict]），而非用户级
+    r = client.post(
+        "/api/channels/email/bind",
+        json={"recipient": "me@example.com", "radar_id": radar_id},
+    )
     assert r.status_code == 200
     radars = client.get("/api/radars").json()
-    assert radars[0]["notify_channels"] == ["email"]
+    nc = radars[0]["notify_channels"]
+    assert any(isinstance(b, dict) and b.get("channel_type") == "email" for b in nc)

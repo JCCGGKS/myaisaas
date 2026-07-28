@@ -27,16 +27,21 @@ def test_notify_multi_channel_and_dedup():
             email="notify_test@example.com",
             password="x",
             is_guest=False,
-            channel_bindings=[
-                {"channel_type": "email", "recipient": "me@example.com", "verified": True},
-                {"channel_type": "webpush", "recipient": "sub-x", "verified": True},
-            ],
         )
         db.add(user)
         db.commit()
         db.refresh(user)
 
-        radar = Radar(owner_id=user.id, raw_query="q", notify_channels=["email", "webpush"], active=True)
+        # 接收人直接来自雷达的 notify_channels（list[dict]），不再依赖 user.channel_bindings
+        radar = Radar(
+            owner_id=user.id,
+            raw_query="q",
+            notify_channels=[
+                {"channel_type": "email", "recipient": "me@example.com", "verified": True},
+                {"channel_type": "webpush", "recipient": "sub-x", "verified": True},
+            ],
+            active=True,
+        )
         db.add(radar)
         db.commit()
         db.refresh(radar)

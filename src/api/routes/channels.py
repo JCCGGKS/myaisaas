@@ -2,7 +2,6 @@
 from typing import Optional
 
 from fastapi import APIRouter, Body, Depends, Query
-from fastapi.responses import JSONResponse
 
 from api.deps import get_current_user, get_db
 from business.channel_service import bind_channel, list_channels, verify_channel
@@ -13,8 +12,12 @@ router = APIRouter(prefix="/api/channels", tags=["channels"])
 
 
 @router.get("", response_model=list[ChannelOut])
-async def list_mine(user: User = Depends(get_current_user), db=Depends(get_db)):
-    return list_channels(db, user)
+async def list_mine(
+    user: User = Depends(get_current_user),
+    db=Depends(get_db),
+    radar_id: Optional[int] = Query(None, description="传入则按该雷达的实际绑定标注 bound/verified"),
+):
+    return list_channels(db, user, radar_id)
 
 
 @router.post("/{channel_type}/bind", response_model=ChannelOut)
@@ -25,9 +28,12 @@ async def bind(
     db=Depends(get_db),
 ):
     recipient = payload.recipient if payload else ""
+    radar_id = payload.radar_id if payload else None
     # bind_channel 现含验证邮件发送（异步），需 await
-    result = await bind_channel(db, user, channel_type, recipient)
-    return JSONResponse(result)
+    result = await bind_channel(db, user, channel_type, recipient, radar_id)
+    # 直接返回 dict：交给 FastAPI 按 response_model 序列化，
+    # 并自动合并依赖注入的 guest cookie（避免显式 JSONResponse 丢 cookie 的坑）
+    return result
 
 
 @router.get("/verify")

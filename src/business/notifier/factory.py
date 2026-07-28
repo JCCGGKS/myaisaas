@@ -1,6 +1,7 @@
 """渠道工厂（Factory）：按 channel_type 实例化策略，新增渠道零改分发代码。"""
 from business.notifier.channels import (
     EmailChannel,
+    FeishuChannel,
     NotificationChannel,
     TelegramChannel,
     WebhookChannel,
@@ -15,6 +16,7 @@ class ChannelFactory:
         "telegram": TelegramChannel,
         "email": EmailChannel,
         "webhook": WebhookChannel,
+        "feishu": FeishuChannel,
     }
 
     @classmethod

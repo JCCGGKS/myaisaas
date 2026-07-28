@@ -24,7 +24,9 @@ class Radar(Base):
     keywords = Column(JSON, default=list, nullable=False)
     sources = Column(JSON, default=list, nullable=False)
     filters = Column(JSON, default=dict, nullable=False)
-    # 多通道：本雷达绑定的推送渠道类型列表
+    # 绑定跟随雷达：本雷达的推送绑定列表，元素为 dict
+    # {channel_type, recipient, verified, bind_token?, bind_token_expire_at?}
+    # 不再存于用户级；新建雷达默认空、不继承其他雷达
     notify_channels = Column(JSON, default=list, nullable=False)
     # 监控增量游标：{ "<source_id>": "<last_seen_token>" }
     scan_state = Column(JSON, default=dict, nullable=False)

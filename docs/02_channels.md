@@ -165,3 +165,6 @@ POST /api/channels/feishu/bind  { recipient: "webhook url" }
 ### 关联的已记录待修项
 - 旧 `notify_radar` 去重缺失（§6 覆盖）。
 - 旧 telegram webhook 伪造 user_id 漏洞（本期渠道已无 telegram，自然消除）。
+
+# 参考资料
++ [手把手教你通过飞书Webhook打造一个消息推送Bot](https://www.feishu.cn/content/7271149634339422210)

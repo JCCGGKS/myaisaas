@@ -5,8 +5,14 @@
 - email 现阶段走本地 SMTP（MailHog 兼容），未配置 host 时退回 mock；测试注入 FakeChannel。
 """
 import asyncio
+import base64
+import hashlib
+import hmac
 import smtplib
+import time
 from dataclasses import dataclass
+
+import httpx
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import formataddr
@@ -47,6 +53,91 @@ class TelegramChannel(NotificationChannel):
         logger.info("Telegram 发送 chat_id=%s", chat_id)
         # TODO: 真实调用 Telegram Bot API（sendMessage）
         return True
+
+
+class FeishuChannel(NotificationChannel):
+    """飞书（Lark）群机器人：向绑定提供的 webhook URL 推送 interactive 卡片。
+
+    recipient = 群机器人 webhook 地址（https://open.feishu.cn/open-apis/bot/v2/hook/xxx）。
+    机器人开启「签名校验」时，需在 settings.feishu.sign_secret 配置对应密钥（与 webhook 同源）。
+    """
+
+    def __init__(
+        self,
+        webhook_url: str | None = None,
+        sign_secret: str | None = None,
+        timeout: float | None = None,
+    ):
+        self.webhook_url = webhook_url
+        self.sign_secret = sign_secret if sign_secret is not None else settings.feishu.sign_secret
+        self.timeout = timeout if timeout is not None else settings.feishu.timeout
+
+    @staticmethod
+    def _gen_sign(secret: str, timestamp: str) -> str:
+        # 飞书签名：HMAC-SHA256(string_to_sign=时间戳+"\n"+密钥)，再做 base64
+        string_to_sign = f"{timestamp}\n{secret}"
+        hmac_code = hmac.new(string_to_sign.encode("utf-8"), digestmod=hashlib.sha256).digest()
+        return base64.b64encode(hmac_code).decode("utf-8")
+
+    def _build_payload(self, msg: PushMessage) -> dict:
+        payload: dict = {
+            "msg_type": "interactive",
+            "card": {
+                "config": {"wide_screen_mode": True},
+                "header": {
+                    "template": "blue",
+                    "title": {"tag": "plain_text", "content": msg.title},
+                },
+                "elements": [
+                    {"tag": "div", "text": {"tag": "lark_md", "content": msg.body}},
+                    {
+                        "tag": "action",
+                        "actions": [
+                            {
+                                "tag": "button",
+                                "text": {"tag": "plain_text", "content": "查看详情"},
+                                "type": "primary",
+                                "url": msg.url or "#",
+                            }
+                        ],
+                    },
+                ],
+            },
+        }
+        # 开启签名校验则附加 timestamp + sign（与飞书服务端校验一致）
+        if self.sign_secret:
+            timestamp = str(int(time.time()))
+            payload["timestamp"] = timestamp
+            payload["sign"] = self._gen_sign(self.sign_secret, timestamp)
+        return payload
+
+    def _post(self, url: str, payload: dict) -> None:
+        # 同步 HTTP，交由 dispatch 在线程池执行，避免阻塞事件循环
+        with httpx.Client(timeout=self.timeout) as client:
+            resp = client.post(url, json=payload)
+            if resp.status_code >= 400:
+                resp.raise_for_status()
+            try:
+                data = resp.json()
+            except Exception:
+                return
+            # 飞书：HTTP 200 但业务失败（code != 0），如 invalid webhook / sign
+            if isinstance(data, dict) and data.get("code", 0) != 0:
+                raise RuntimeError(f"feishu bot error: {data}")
+
+    async def send(self, webhook_url: str, msg: PushMessage) -> bool:
+        url = webhook_url or self.webhook_url
+        if not url:
+            logger.warning("Feishu 发送跳过：webhook url 为空")
+            return False
+        payload = self._build_payload(msg)
+        try:
+            await asyncio.to_thread(self._post, url, payload)
+            logger.info("Feishu 发送成功 url=%s title=%s", url, msg.title)
+            return True
+        except Exception as exc:  # 外部依赖失败不应中断主流程
+            logger.error("Feishu 发送失败 url=%s : %s", url, exc)
+            return False
 
 
 class EmailChannel(NotificationChannel):

@@ -6,6 +6,7 @@ import pytest
 
 from business import channel_service as cs
 from data.engine import SessionLocal
+from model.radar import Radar
 from model.user import User
 from utils.exceptions import AppError
 
@@ -62,11 +63,16 @@ def test_bind_unknown_channel_rejected(tmp_path, monkeypatch):
     db.add(user)
     db.commit()
     db.refresh(user)
+    radar = Radar(owner_id=user.id, raw_query="q", notify_channels=[], active=True)
+    db.add(radar)
+    db.commit()
+    db.refresh(radar)
     try:
         with pytest.raises(AppError) as exc:
-            asyncio.run(cs.bind_channel(db, user, "telegram", ""))
+            asyncio.run(cs.bind_channel(db, user, "telegram", "", radar.id))
         assert exc.value.code == "unknown_channel"
     finally:
+        db.delete(radar)
         db.delete(user)
         db.commit()
         db.close()

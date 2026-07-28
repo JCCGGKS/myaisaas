@@ -6,11 +6,13 @@ from pydantic import BaseModel, ConfigDict
 
 class RadarCreate(BaseModel):
     raw_query: str
-    notify_channels: list[str] = []  # 多通道：渠道类型列表
+    # 多通道：每个元素为绑定对象 {channel_type, recipient, verified, ...}（绑定跟随雷达）
+    notify_channels: list[dict] = []
 
 
 class RadarChannelsIn(BaseModel):
-    notify_channels: list[str]
+    # 雷达级绑定列表（元素为绑定对象，而非仅类型字符串）
+    notify_channels: list[dict]
 
 
 class RadarOut(BaseModel):
@@ -18,7 +20,8 @@ class RadarOut(BaseModel):
 
     id: int
     raw_query: str
-    notify_channels: list[str]
+    # 绑定跟随雷达：list[dict]，每个元素含 channel_type/recipient/verified
+    notify_channels: list[dict]
     status: str
     active: bool
     keywords: list
@@ -44,12 +47,15 @@ class ChannelOut(BaseModel):
     type: str
     bound: bool
     verified: bool
+    recipient: str | None = None  # 仅在该雷达已绑定时返回接收人
 
 
 class ChannelBind(BaseModel):
-    # channel_type 来自 URL 路径，body 只需 recipient；这里允许缺省以兼容仅传 recipient
+    # channel_type 来自 URL 路径；recipient 为渠道接收人（webhook / 邮箱）
+    # radar_id 必填：绑定跟随雷达，写入对应雷达的 notify_channels
     channel_type: str = ""
     recipient: str = ""
+    radar_id: int | None = None
 
 
 class AuthIn(BaseModel):

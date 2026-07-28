@@ -12,6 +12,7 @@ from business.radar_service import (
     resume_radar,
     set_radar_channels,
 )
+from business.channel_service import unbind_channel
 from dao.event_dao import list_by_radar
 from model.user import User
 from schema.dtos import EventOut, RadarChannelsIn, RadarCreate, RadarOut
@@ -39,6 +40,12 @@ async def detail(radar_id: int, user: User = Depends(get_current_user), db=Depen
 async def set_channels(radar_id: int, payload: RadarChannelsIn, user: User = Depends(get_current_user), db=Depends(get_db)):
     radar = set_radar_channels(db, user, radar_id, payload.notify_channels)
     return RadarOut.model_validate(radar)
+
+
+@router.delete("/{radar_id}/channels/{channel_type}", response_model=RadarOut)
+async def delete_channel(radar_id: int, channel_type: str, user: User = Depends(get_current_user), db=Depends(get_db)):
+    await unbind_channel(db, user, radar_id, channel_type)
+    return RadarOut.model_validate(get_radar(db, user, radar_id))
 
 
 @router.post("/{radar_id}/pause", response_model=RadarOut)

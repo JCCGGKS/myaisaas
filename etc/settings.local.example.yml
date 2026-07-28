@@ -60,6 +60,12 @@ telegram:
   bot_token: ""
   bot_username: ""
 
+feishu:
+  # 飞书群机器人：webhook 由用户绑定时提供（recipient=webhook URL）
+  # 仅当机器人开启「签名校验」时，才需填下面的 sign_secret（与 webhook 同属一个机器人）
+  sign_secret: ""
+  timeout: 10.0
+
 llm:
   # api_key 留空则自然语言解析/相关性打分自动降级（不调用外部）
   base_url: "https://api.openai.com/v1"
