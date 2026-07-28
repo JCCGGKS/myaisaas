@@ -19,13 +19,12 @@ logger = get_logger(__name__)
 
 
 def _merge_guest_into(db: Session, guest: User, target: User) -> None:
-    """把 guest 的雷达与渠道绑定合并进 target，并删除 guest。"""
+    """把 guest 的雷达合并进 target，并删除 guest。
+
+    渠道绑定已跟随雷达（存于 Radar.notify_channels），随雷达归属的
+    owner_id 一并转移，无需在用户级再合并。
+    """
     db.execute(update(Radar).where(Radar.owner_id == guest.id).values(owner_id=target.id))
-    merged = list(target.channel_bindings or [])
-    for b in guest.channel_bindings or []:
-        if not any(x.get("channel_type") == b.get("channel_type") for x in merged):
-            merged.append(b)
-    target.channel_bindings = merged
     db.delete(guest)
     db.flush()
     logger.info("游客数据合并 guest=%s -> user=%s", guest.id, target.id)

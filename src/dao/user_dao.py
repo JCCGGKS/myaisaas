@@ -21,7 +21,7 @@ def get_by_email(db: Session, email: str) -> User | None:
 
 
 def create_guest(db: Session, device_id: str) -> User:
-    user = User(device_id=device_id, is_guest=True, channel_bindings=[])
+    user = User(device_id=device_id, is_guest=True)
     db.add(user)
     db.commit()
     db.refresh(user)

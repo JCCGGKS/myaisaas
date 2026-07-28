@@ -1,24 +1,20 @@
-"""Webhook：Telegram bot 回调写回 chat_id（MVP 占位，真实场景由 Bot 平台推送）。"""
-from fastapi import APIRouter, Depends
+"""Webhook：Telegram bot 回调（暂未实现）。
+
+渠道绑定现已「跟随雷达」存于 Radar.notify_channels，Telegram 绑定流程按既定计划延后
+（先飞书），故本回调暂不可用，仅保留路由占位以便后续接入时直接实现，避免改动 main 注册。
+"""
+from fastapi import APIRouter, Depends, status
 
 from api.deps import get_db
-from dao.channel_dao import update_recipient
-from dao.user_dao import get_by_id
-from utils.logging import get_logger
-
-logger = get_logger(__name__)
+from utils.exceptions import AppError
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
 
 @router.post("/telegram")
 async def telegram_webhook(body: dict, db=Depends(get_db)):
-    user_id = body.get("user_id")
-    chat_id = body.get("chat_id")
-    if not user_id or not chat_id:
-        return {"ok": False, "error": "user_id and chat_id required"}
-    user = get_by_id(db, int(user_id))
-    if user is None:
-        return {"ok": False, "error": "user not found"}
-    update_recipient(db, user, "telegram", str(chat_id))
-    return {"ok": True}
+    raise AppError(
+        "Telegram 绑定暂未实现（按计划先接入飞书），敬请期待",
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        code="not_implemented",
+    )

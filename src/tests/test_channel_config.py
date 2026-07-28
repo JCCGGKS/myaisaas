@@ -40,7 +40,7 @@ def test_list_channels_uses_configured_types(tmp_path, monkeypatch):
     # list_channels 遍历模块级 CHANNEL_TYPES；改配置即改返回
     monkeypatch.setattr(cs, "CHANNEL_TYPES", ["email", "sms"])
     db = SessionLocal()
-    user = User(device_id="chan_test_1", is_guest=True, channel_bindings=[])
+    user = User(device_id="chan_test_1", is_guest=True)
     db.add(user)
     db.commit()
     db.refresh(user)
@@ -59,7 +59,7 @@ def test_bind_unknown_channel_rejected(tmp_path, monkeypatch):
 
     monkeypatch.setattr(cs, "CHANNEL_TYPES", ["email"])
     db = SessionLocal()
-    user = User(device_id="chan_test_2", is_guest=True, channel_bindings=[])
+    user = User(device_id="chan_test_2", is_guest=True)
     db.add(user)
     db.commit()
     db.refresh(user)
