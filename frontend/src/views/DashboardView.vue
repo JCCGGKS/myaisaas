@@ -1,11 +1,15 @@
 <script setup>
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { listRadars, listEvents, createRadar, listChannels, bindChannel, unbindChannel, deleteRadar, getMe, logout } from '../services/api.js'
+import { registerPush, isPushSupported } from '../services/push.js'
 
 const radars = ref([])
 const eventsByRadar = ref({})
 const loading = ref(true)
 const error = ref('')
+// 绑定/解绑失败的错误弹窗（以弹窗形式展现，避免与创建雷达的错误混淆）
+const showErrorModal = ref(false)
+const errorModalMsg = ref('')
 const showLimitModal = ref(false)
 const limitMsg = ref('')
 
@@ -35,6 +39,9 @@ function chanHint(type) {
   if (type === 'email') {
     return '绑定后我们会发送一封验证邮件，点击邮件内链接即可激活（本地开发自动激活）。'
   }
+  if (type === 'webpush') {
+    return '点击「允许通知并订阅」后，命中事件会以浏览器原生通知推送到本设备（关页面也能收）。无需绑定第三方账号。'
+  }
   return ''
 }
 
@@ -43,6 +50,11 @@ function chanPlaceholder(type) {
   if (type === 'email') return '你的邮箱地址'
   if (type === 'feishu') return '飞书机器人 Webhook 地址'
   return 'Webhook URL'
+}
+
+// webpush 不需要 recipient 输入框，改为点击订阅按钮
+function chanNeedsInput(type) {
+  return type !== 'webpush' && type !== 'telegram'
 }
 
 const EXAMPLES = [
@@ -134,6 +146,7 @@ async function openBind(r) {
   currentRadarId.value = r.id
   showBindModal.value = true
   telegramConnect.value = ''
+  errorModalMsg.value = ''
   try {
     channels.value = await listChannels(r.id)
   } catch (e) {
@@ -145,6 +158,13 @@ async function bind(c) {
   if (c.bound || bindingType.value) return
   bindingType.value = c.type
   try {
+    // webpush：走浏览器订阅流程（权限 -> SW -> subscribe -> 绑定）
+    if (c.type === 'webpush') {
+      await registerPush(currentRadarId.value, bindChannel)
+      channels.value = await listChannels(currentRadarId.value)
+      await load()
+      return
+    }
     // telegram 无需 recipient；email/webhook 取对应输入
     const recipient = c.type === 'telegram' ? '' : bindRecipients.value[c.type] || ''
     const res = await bindChannel(currentRadarId.value, c.type, recipient)
@@ -163,9 +183,9 @@ async function bind(c) {
     if (e.code === 'limit_exceeded') {
       showLimitModal.value = true
       limitMsg.value = e.message
-      error.value = ''
     } else {
-      error.value = e.message || '绑定失败'
+      errorModalMsg.value = e.message || '绑定失败'
+      showErrorModal.value = true
     }
   } finally {
     bindingType.value = ''
@@ -181,7 +201,8 @@ async function unbind(c) {
     channels.value = await listChannels(currentRadarId.value)
     await load()
   } catch (e) {
-    error.value = e.message || '解绑失败'
+    errorModalMsg.value = e.message || '解绑失败'
+    showErrorModal.value = true
   } finally {
     unbindingType.value = ''
   }
@@ -378,13 +399,16 @@ onUnmounted(() => {
                   >{{ c.bound ? (c.verified ? '已绑定' : '待验证') : '' }}</span>
                 </div>
                 <input
-                  v-if="c.type !== 'telegram'"
+                  v-if="chanNeedsInput(c.type)"
                   v-model="bindRecipients[c.type]"
                   class="chan__input"
                   type="text"
                   :placeholder="chanPlaceholder(c.type)"
                   :disabled="!!bindingType || c.bound"
                 />
+                <p v-if="c.type === 'webpush' && !isPushSupported()" class="chan__hint">
+                  当前环境不支持 Web Push：Service Worker 与通知 API 仅可在 <strong>http://localhost</strong> 或 <strong>https</strong> 下使用。请改用 localhost 访问前端（不要用局域网 IP），并确认浏览器未禁用通知。
+                </p>
                 <p v-if="c.recipient" class="chan__recipient mono">{{ c.recipient }}</p>
                 <p v-if="chanHint(c.type)" class="chan__hint">{{ chanHint(c.type) }}</p>
                 <div class="chan__actions">
@@ -395,7 +419,7 @@ onUnmounted(() => {
                     :disabled="!!bindingType"
                     @click="bind(c)"
                   >
-                    {{ bindingType === c.type ? '绑定中…' : '绑定' }}
+                    {{ bindingType === c.type ? '处理中…' : (c.type === 'webpush' ? '允许通知并订阅' : '绑定') }}
                   </button>
                   <button
                     v-else
@@ -428,6 +452,21 @@ onUnmounted(() => {
             <div class="modal__actions">
               <router-link to="/signin" class="btn btn-primary" @click="showLimitModal = false">登录 / 注册解锁</router-link>
               <button class="btn btn-ghost" type="button" @click="showLimitModal = false">稍后再说</button>
+            </div>
+          </div>
+        </div>
+      </transition>
+
+      <!-- 通用错误弹窗：绑定/解绑等操作失败时的提示 -->
+      <transition name="fade">
+        <div v-if="showErrorModal" class="modal" @click.self="showErrorModal = false">
+          <div class="modal__card">
+            <button class="modal__close" type="button" @click="showErrorModal = false" aria-label="关闭">×</button>
+            <p class="eyebrow">// ERROR</p>
+            <h3 class="modal__title">操作失败</h3>
+            <p class="modal__sub mono">{{ errorModalMsg }}</p>
+            <div class="modal__actions">
+              <button class="btn btn-primary" type="button" @click="showErrorModal = false">我知道了</button>
             </div>
           </div>
         </div>

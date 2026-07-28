@@ -202,6 +202,13 @@ export async function unbindChannel(radarId, type) {
   return request(`/radars/${radarId}/channels/${type}`, { method: 'DELETE' })
 }
 
+// 获取 VAPID 公钥（Web Push 订阅用 applicationServerKey）
+export async function getVapidPublicKey() {
+  if (USE_MOCK) return '' // mock 模式无需真实密钥
+  const data = await request('/channels/vapid-public-key')
+  return data.vapid_public_key || ''
+}
+
 // 删除雷达（联删其事件）：路由 DELETE /radars/:id
 export async function deleteRadar(radarId) {
   if (USE_MOCK) {

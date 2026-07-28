@@ -32,3 +32,8 @@ app.directive('reveal', {
 
 app.use(router)
 app.mount('#app')
+
+// 注册 Service Worker（Web Push 收通知用）。失败不影响页面其余功能。
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {})
+}
