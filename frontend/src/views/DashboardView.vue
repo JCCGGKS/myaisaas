@@ -1,6 +1,6 @@
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick, computed } from 'vue'
-import { listRadars, listEvents, createRadar, listChannels, bindChannel, deleteRadar, getMe, logout } from '../services/api.js'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { listRadars, listEvents, createRadar, listChannels, bindChannel, unbindChannel, deleteRadar, getMe, logout } from '../services/api.js'
 
 const radars = ref([])
 const eventsByRadar = ref({})
@@ -16,16 +16,34 @@ const loggingOut = ref(false)
 const newQuery = ref('')
 const creating = ref(false)
 
+// 绑定弹窗：绑定跟随雷达，弹窗内操作的是「当前雷达」的渠道
 const channels = ref([])
+const currentRadarId = ref(null)
 const bindingType = ref('')
+const unbindingType = ref('')
 const showBindModal = ref(false)
 // 真实后端绑定 email/webhook 需要 recipient；按渠道类型分别暂存
 const bindRecipients = ref({})
 // telegram 绑定后后端返回 connect_url，引导用户打开完成 bot 连接
 const telegramConnect = ref('')
 
-// 已绑定的渠道（同框内先绑后建）
-const boundChannel = computed(() => channels.value.find((c) => c.bound) || null)
+// 各渠道绑定引导提示：帮助用户知道「要去哪拿到接收地址」
+function chanHint(type) {
+  if (type === 'feishu') {
+    return '飞书机器人依附于群聊，但你可以新建一个「只有自己」的群当作私人收件箱：飞书 → 新建群（只拉你自己）→ 设置 → 群机器人 → 添加「自定义机器人」，复制其 Webhook 地址（形如 https://open.feishu.cn/open-apis/bot/v2/hook/...）粘贴到上方，绑定即生效。若机器人开启了「签名校验」，请联系管理员在后端配置签名密钥。'
+  }
+  if (type === 'email') {
+    return '绑定后我们会发送一封验证邮件，点击邮件内链接即可激活（本地开发自动激活）。'
+  }
+  return ''
+}
+
+// 不同渠道的输入框占位符
+function chanPlaceholder(type) {
+  if (type === 'email') return '你的邮箱地址'
+  if (type === 'feishu') return '飞书机器人 Webhook 地址'
+  return 'Webhook URL'
+}
 
 const EXAMPLES = [
   'LISA 演唱会与新歌动态',
@@ -37,9 +55,8 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const [rs, chs, meRes] = await Promise.all([listRadars(), listChannels(), getMe()])
+    const [rs, meRes] = await Promise.all([listRadars(), getMe()])
     radars.value = rs
-    channels.value = chs
     me.value = meRes
     await Promise.all(
       rs.map(async (r) => {
@@ -72,9 +89,8 @@ async function addRadar() {
   creating.value = true
   showLimitModal.value = false
   try {
-    // 渠道可选：未绑定时传空值占位（"未绑定"），不阻断创建
-    const channel = boundChannel.value?.type || ''
-    const radar = await createRadar(newQuery.value, channel)
+    // 绑定跟随雷达：创建时不携带渠道，渠道在雷达卡片内单独绑定
+    const radar = await createRadar(newQuery.value)
     newQuery.value = ''
     await load()
     nextTick(() => {
@@ -113,25 +129,35 @@ async function removeRadar(r) {
   }
 }
 
+// 打开某雷达的绑定弹窗：加载该雷达的实际绑定状态（绑定跟随雷达，互不继承）
+async function openBind(r) {
+  currentRadarId.value = r.id
+  showBindModal.value = true
+  telegramConnect.value = ''
+  try {
+    channels.value = await listChannels(r.id)
+  } catch (e) {
+    error.value = e.message || '加载渠道失败'
+  }
+}
+
 async function bind(c) {
   if (c.bound || bindingType.value) return
   bindingType.value = c.type
   try {
     // telegram 无需 recipient；email/webhook 取对应输入
     const recipient = c.type === 'telegram' ? '' : bindRecipients.value[c.type] || ''
-    const res = await bindChannel(c.type, recipient)
-    const idx = channels.value.findIndex((x) => x.type === c.type)
-    if (idx >= 0) channels.value[idx] = res
-    if (c.type !== 'telegram') bindRecipients.value[c.type] = ''
+    const res = await bindChannel(currentRadarId.value, c.type, recipient)
     // telegram 需打开 connect_url 完成连接：保留弹窗展示链接
     if (c.type === 'telegram' && res.connect_url) {
       telegramConnect.value = res.connect_url
-      await load()
+      channels.value = await listChannels(currentRadarId.value)
       return
     }
     telegramConnect.value = ''
-    // 绑定后关闭弹窗并刷新（后端会回填雷达的 notify_channels）
-    showBindModal.value = false
+    if (c.type !== 'telegram') bindRecipients.value[c.type] = ''
+    // 刷新弹窗内（当前雷达）与雷达卡片的绑定状态
+    channels.value = await listChannels(currentRadarId.value)
     await load()
   } catch (e) {
     if (e.code === 'limit_exceeded') {
@@ -146,20 +172,40 @@ async function bind(c) {
   }
 }
 
+// 解绑：从当前雷达移除该渠道
+async function unbind(c) {
+  if (!c.bound || unbindingType.value) return
+  unbindingType.value = c.type
+  try {
+    await unbindChannel(currentRadarId.value, c.type)
+    channels.value = await listChannels(currentRadarId.value)
+    await load()
+  } catch (e) {
+    error.value = e.message || '解绑失败'
+  } finally {
+    unbindingType.value = ''
+  }
+}
+
 const fmtTime = (iso) => {
   const d = new Date(iso)
   return d.toLocaleString()
 }
 
-// 雷达绑定的渠道列表：兼容多来源字段（mock 的 channels / 真实后端的 notify_channels / 旧单值 notify_channel）
-const radarChannels = (r) =>
-  Array.isArray(r.channels)
-    ? r.channels
-    : Array.isArray(r.notify_channels)
-      ? r.notify_channels
+// 雷达已绑定渠道：优先解析 notify_channels（list[dict]，元素含 channel_type）；
+// 兼容旧字段 channels（list[str]）/ notify_channel（单值字符串）。绑定跟随雷达，每个雷达独立。
+const radarChannels = (r) => {
+  const list = Array.isArray(r.notify_channels)
+    ? r.notify_channels
+    : Array.isArray(r.channels)
+      ? r.channels
       : r.notify_channel
         ? [r.notify_channel]
         : []
+  return list
+    .map((b) => (typeof b === 'string' ? b : b?.channel_type))
+    .filter(Boolean)
+}
 
 // 短轮询：监控循环会持续产出真实事件，定时刷新让事件流自动出现（无需手动演示）
 const REFRESH_MS = 30_000
@@ -237,8 +283,8 @@ onUnmounted(() => {
                 {{ creating ? '创建中…' : '创建雷达' }}
               </button>
             </form>
-            <p v-if="!boundChannel" class="onboard__hint mono">
-              💡 推送渠道可选：绑定后命中的事件会主动通知你；不绑定也能直接创建雷达。
+            <p class="onboard__hint mono">
+              💡 推送渠道可选：雷达创建后可在下方卡片内单独绑定渠道，命中即通知你；不绑定也能直接创建雷达。每个雷达的绑定相互独立。
             </p>
             <div class="onboard__chips">
               <button v-for="ex in EXAMPLES" :key="ex" class="chip" type="button" @click="fillExample(ex)">
@@ -267,8 +313,8 @@ onUnmounted(() => {
             <h2 class="radar__query">{{ r.raw_query }}</h2>
             <div class="radar__chans">
               <span v-for="ch in radarChannels(r)" :key="ch" class="radar__chan mono">{{ ch }}</span>
-              <button class="radar__chan radar__chan--btn mono" type="button" @click="showBindModal = true">
-                点击绑定
+              <button class="radar__chan radar__chan--btn mono" type="button" @click="openBind(r)">
+                {{ radarChannels(r).length ? '管理绑定' : '点击绑定' }}
               </button>
             </div>
             <button class="radar__del mono" type="button" :disabled="deleting" @click="removeRadar(r)">
@@ -311,33 +357,56 @@ onUnmounted(() => {
         </article>
       </section>
 
-      <!-- 绑定渠道弹窗：点击雷达卡片「未绑定」时弹出 -->
+      <!-- 绑定渠道弹窗：点击雷达卡片「绑定/管理绑定」时弹出，操作当前雷达的渠道 -->
       <transition name="fade">
         <div v-if="showBindModal" class="modal" @click.self="showBindModal = false">
           <div class="modal__card">
             <button class="modal__close" type="button" @click="showBindModal = false" aria-label="关闭">×</button>
             <p class="eyebrow">// BIND CHANNEL</p>
             <h3 class="modal__title">绑定推送渠道</h3>
-            <p class="modal__sub">选择并绑定一个渠道，雷达命中的事件会主动通知你。</p>
+            <p class="modal__sub">
+              为雷达「<strong>{{ radars.find((r) => r.id === currentRadarId)?.raw_query }}</strong>」绑定渠道，命中的事件会主动通知你。绑定仅作用于本雷达。
+            </p>
             <div class="chans">
               <div v-for="c in channels" :key="c.type" class="chan chan--col">
-                <span class="chan__type mono">{{ c.type }}</span>
+                <div class="chan__row">
+                  <span class="chan__type mono">{{ c.type }}</span>
+                  <span
+                    v-if="c.bound"
+                    class="chan__status mono"
+                    :class="c.verified ? 'is-ok' : 'is-pending'"
+                  >{{ c.bound ? (c.verified ? '已绑定' : '待验证') : '' }}</span>
+                </div>
                 <input
                   v-if="c.type !== 'telegram'"
                   v-model="bindRecipients[c.type]"
                   class="chan__input"
                   type="text"
-                  :placeholder="c.type === 'email' ? '你的邮箱地址' : 'Webhook URL'"
+                  :placeholder="chanPlaceholder(c.type)"
                   :disabled="!!bindingType || c.bound"
                 />
-                <button
-                  class="chan__btn"
-                  type="button"
-                  :disabled="!!bindingType || c.bound"
-                  @click="bind(c)"
-                >
-                  {{ bindingType === c.type ? '绑定中…' : (c.bound ? '已绑定' : '绑定') }}
-                </button>
+                <p v-if="c.recipient" class="chan__recipient mono">{{ c.recipient }}</p>
+                <p v-if="chanHint(c.type)" class="chan__hint">{{ chanHint(c.type) }}</p>
+                <div class="chan__actions">
+                  <button
+                    v-if="!c.bound"
+                    class="chan__btn"
+                    type="button"
+                    :disabled="!!bindingType"
+                    @click="bind(c)"
+                  >
+                    {{ bindingType === c.type ? '绑定中…' : '绑定' }}
+                  </button>
+                  <button
+                    v-else
+                    class="chan__btn chan__btn--unbind"
+                    type="button"
+                    :disabled="!!unbindingType"
+                    @click="unbind(c)"
+                  >
+                    {{ unbindingType === c.type ? '解绑中…' : '解绑' }}
+                  </button>
+                </div>
               </div>
             </div>
             <p v-if="telegramConnect" class="bind__connect mono">
@@ -558,6 +627,32 @@ onUnmounted(() => {
 .chan__btn:hover:not(:disabled) { background: rgba(184, 255, 60, 0.1); }
 .chan__btn:disabled { opacity: 0.5; cursor: default; }
 .chan--col { flex-direction: column; align-items: stretch; gap: 8px; }
+.chan__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.chan__status {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--line-strong);
+}
+.chan__status.is-ok { color: var(--lime); border-color: var(--lime); }
+.chan__status.is-pending { color: var(--amber); border-color: var(--amber); }
+.chan__recipient {
+  font-size: 11px;
+  color: var(--muted);
+  word-break: break-all;
+}
+.chan__actions { display: flex; gap: 10px; }
+.chan__btn--unbind {
+  color: var(--amber);
+  border-color: var(--amber);
+}
+.chan__btn--unbind:hover:not(:disabled) { background: rgba(255, 176, 32, 0.12); }
 .chan__input {
   background: var(--ink);
   border: 1px solid var(--line);
@@ -569,6 +664,16 @@ onUnmounted(() => {
 }
 .chan__input::placeholder { color: var(--muted-2); }
 .chan__input:focus { outline: none; border-color: var(--lime); }
+.chan__hint {
+  margin: -2px 0 2px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+  background: rgba(184, 255, 60, 0.06);
+  border-left: 2px solid var(--lime);
+  border-radius: 4px;
+  padding: 8px 10px;
+}
 .bind__connect {
   margin-top: 16px;
   font-size: 12.5px;

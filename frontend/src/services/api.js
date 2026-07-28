@@ -10,8 +10,9 @@ const uid = () =>
   (crypto.randomUUID && crypto.randomUUID()) ||
   `r_${Date.now()}_${Math.random().toString(36).slice(2)}`
 
-// 模拟游客限额（见 AGENTS.md）：游客最多 1 雷达；演示用允许多渠道绑定（达到上限弹窗）
-const GUEST_LIMIT = { radar: 1, channel: 3 }
+// 模拟游客限额（见 AGENTS.md）：游客最多 1 雷达；
+// 绑定跟随雷达，渠道限额按「单个雷达」计（演示默认每雷达最多 1 个渠道）
+const GUEST_LIMIT = { radar: 1, channel_per_radar: 1 }
 
 // ---------- mock 数据（无后端时演示用） ----------
 const MOCK_RADARS = []
@@ -95,8 +96,9 @@ async function request(path, options = {}) {
 // ---------- 对外接口 ----------
 
 // 创建雷达：自然语言 -> 后端 LLM 解析为结构化参数
-// notifyChannel：创建时传入已绑定的推送渠道类型；未绑定时为空值占位（表示未绑定）
-export async function createRadar(rawQuery, notifyChannel = '') {
+// 注意：绑定跟随雷达（方案 B），创建时不携带任何渠道；
+// 渠道在雷达创建后于卡片内单独绑定，且每个雷达相互独立、不继承其它雷达。
+export async function createRadar(rawQuery) {
   if (!rawQuery || !rawQuery.trim()) throw new Error('监控目标不能为空')
   if (USE_MOCK) {
     await delay(600)
@@ -108,8 +110,7 @@ export async function createRadar(rawQuery, notifyChannel = '') {
       raw_query: rawQuery.trim(),
       keywords: [],
       sources: [],
-      notify_channel: notifyChannel,
-      channels: notifyChannel ? [notifyChannel] : [],
+      notify_channels: [], // 绑定跟随雷达：默认空，创建后单独绑定
       active: true,
       created_at: new Date().toISOString(),
     }
@@ -118,12 +119,12 @@ export async function createRadar(rawQuery, notifyChannel = '') {
     MOCK_EVENTS[radar.id] = mockEventsFor(radar)
     return radar
   }
-  // 真实后端期望 notify_channels（多通道列表），与 AGENTS.md 一致
+  // 真实后端期望 notify_channels（多通道列表），与 AGENTS.md 一致；此处留空
   return request('/radars', {
     method: 'POST',
     body: JSON.stringify({
       raw_query: rawQuery.trim(),
-      notify_channels: notifyChannel ? [notifyChannel] : [],
+      notify_channels: [],
     }),
   })
 }
@@ -147,36 +148,58 @@ export async function listEvents(radarId) {
 }
 
 // 可用渠道 + 绑定状态（渠道无关，见 AGENTS.md）
-export async function listChannels() {
+// radarId 非空时按该雷达的真实绑定标注 bound/verified/recipient（绑定跟随雷达）
+export async function listChannels(radarId = null) {
   if (USE_MOCK) {
     await delay(200)
-    return MOCK_CHANNELS.map((c) => ({ ...c }))
+    const radar = radarId != null ? MOCK_RADARS.find((r) => r.id === radarId) : null
+    const bound = new Set((radar?.notify_channels || []).map((b) => b.channel_type))
+    return MOCK_CHANNELS.map((c) => ({
+      type: c.type,
+      bound: bound.has(c.type),
+      verified: (radar?.notify_channels || []).some((b) => b.channel_type === c.type && b.verified),
+      recipient:
+        (radar?.notify_channels || []).find((b) => b.channel_type === c.type)?.recipient || null,
+    }))
   }
-  return request('/channels')
+  const qs = radarId != null ? `?radar_id=${encodeURIComponent(radarId)}` : ''
+  return request(`/channels${qs}`)
 }
 
-// 绑定渠道：email/webhook 直接提交 recipient；telegram 返回 connect_url
-export async function bindChannel(type, recipient) {
+// 绑定渠道（跟随雷达）：必须指定 radarId；email/webhook 提交 recipient
+export async function bindChannel(radarId, type, recipient = '') {
   if (USE_MOCK) {
     await delay(500)
-    const bound = MOCK_CHANNELS.filter((c) => c.bound).length
-    if (bound >= GUEST_LIMIT.channel) {
-      throw limitError(`游客最多绑定 ${GUEST_LIMIT.channel} 个渠道，登录解锁更多`)
+    const radar = MOCK_RADARS.find((r) => r.id === radarId)
+    if (!radar) throw new Error('雷达不存在')
+    // 游客按「单个雷达」计渠道限额
+    const count = (radar.notify_channels || []).length
+    if (count >= GUEST_LIMIT.channel_per_radar) {
+      throw limitError(`游客每个雷达最多绑定 ${GUEST_LIMIT.channel_per_radar} 个渠道，登录解锁更多`)
     }
-    const c = MOCK_CHANNELS.find((x) => x.type === type)
-    if (!c) throw new Error(`unknown channel: ${type}`)
-    c.bound = true
-    // 模拟后端行为：把渠道加入每个雷达的 channels 列表（多通道），去重
-    MOCK_RADARS.forEach((r) => {
-      if (!r.channels) r.channels = []
-      if (!r.channels.includes(type)) r.channels.push(type)
-    })
-    return { ...c }
+    const list = radar.notify_channels || (radar.notify_channels = [])
+    if (!list.some((b) => b.channel_type === type)) {
+      list.push({ channel_type: type, recipient: recipient || '', verified: true })
+    }
+    return { type, bound: true, verified: true }
   }
   return request(`/channels/${type}/bind`, {
     method: 'POST',
-    body: JSON.stringify({ recipient: recipient || '' }),
+    body: JSON.stringify({ recipient: recipient || '', radar_id: radarId }),
   })
+}
+
+// 解绑渠道（跟随雷达）：从指定雷达移除该渠道
+export async function unbindChannel(radarId, type) {
+  if (USE_MOCK) {
+    await delay(400)
+    const radar = MOCK_RADARS.find((r) => r.id === radarId)
+    if (radar?.notify_channels) {
+      radar.notify_channels = radar.notify_channels.filter((b) => b.channel_type !== type)
+    }
+    return { type, bound: false, verified: false }
+  }
+  return request(`/radars/${radarId}/channels/${type}`, { method: 'DELETE' })
 }
 
 // 删除雷达（联删其事件）：路由 DELETE /radars/:id
